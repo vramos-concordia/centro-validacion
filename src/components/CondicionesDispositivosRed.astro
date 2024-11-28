@@ -1,0 +1,77 @@
+---
+//const { obj } = Astro.props;
+---
+<div class="box">
+  <div class="field">
+    <label class="label" for="conexion_internet">¿Conexión a Internet?</label>
+    <div class="control">
+      <div>
+        <select id="conexion_internet" name="conexion_internet" class="form-select" required>
+          <option value="">Seleccione una opción</option>
+          <option value="1">SÍ</option>
+          <option value="2">NO</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="box">
+  <div class="field">
+    <label class="label" for="dispositivos">¿Cuenta con dispositivos electronicos?</label>
+    <div class="control">
+      <div>
+        <select id="dispositivos" name="dispositivos" class="form-select" required>
+          <option value="">Seleccione una opción</option>
+          <option value="1">SÍ</option>
+          <option value="2">NO</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  
+  <div id="divTipoDispostivo" class="field d-none">
+    <label class="label">¿Con que dispositivos cuenta?</label>
+    <div class="control">
+      <div>
+        <select id="tipo_dispositivo" name="tipo_dispositivo" class="form-select">
+          <option value="">Seleccione una opción</option>
+          <option value="1">Computador de escritorio</option>
+          <option value="2">Notebook</option>
+          <option value="3">Computador de escritorio y Notebook</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="box">
+  <div class="field">
+    <label class="label" for="nivel_computacion">¿Nivel usuaria de Computación?</label>
+    <div class="control">
+      <div>
+        <select id="nivel_computacion" name="nivel_computacion" class="form-select" required>
+          <option value="">Seleccione una opción</option>
+          <option value="1">SÍ</option>
+          <option value="2">NO</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const selectDispositivos = document.getElementById('dispositivos') as HTMLInputElement;
+  const divTipoDispostivo = document.getElementById('divTipoDispostivo') as HTMLElement;
+  const selectTipoDispositivo = document.getElementById('tipo_dispositivo') as HTMLInputElement;
+
+  selectDispositivos.addEventListener('change', function() {
+    if ( selectDispositivos.value === '1') {
+      divTipoDispostivo.classList.remove('d-none');
+      selectTipoDispositivo.setAttribute("required", "required");
+    } else {
+      divTipoDispostivo.classList.add('d-none');
+      selectTipoDispositivo.removeAttribute("required");
+    }
+  });
+</script>

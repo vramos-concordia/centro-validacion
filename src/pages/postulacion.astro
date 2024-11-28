@@ -1,0 +1,145 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { configEnv } from '../lib/vars';
+import { AES, enc } from 'crypto-ts';
+import { connect } from '@planetscale/database';
+
+const config = {
+  host: configEnv.DATABASE_HOST,
+  username: configEnv.DATABASE_USERNAME,
+  password: configEnv.DATABASE_PASSWORD,
+  fetch: (url: any, init: any) => {
+    delete init['cache']
+    return fetch(url, init)
+  }
+}
+
+const horario : {[key: string]: any}= {
+  'am' : 'AM [09:00 - 12:45]',
+  'pm' : 'PM [14:30 - 18:00]',
+  'vp' : 'VP [19:00 - 22:00]'
+}
+
+const dias: {[key: string]: any} = {
+  'L' : 'Lunes',
+  'M' : 'Martes',
+  'X' : 'Miercoles',
+  'J' : 'Jueves',
+  'V' : 'Viernes',
+  'S' : 'Sabado',
+  'D' : 'Domingo'
+}
+
+
+let obj : {[key: string]: any} = {};
+let row : {[key: string]: any} = {};
+let rowSala : {[key: string]: any} = {};
+
+let nombres = '';
+
+if ( Astro.cookies.has('token') ) {
+  let token = Astro.cookies.get('token')?.value as string;
+  let decodeBase64Token = atob(token);
+  let decrypted = AES.decrypt(decodeBase64Token, configEnv.SECRET_KEY);
+  obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+  console.log('cookie-resumen', {obj});
+
+  const conn = connect(config);
+  
+  const query = `select * from ndb_postulant where run = :run`;
+  const params = {
+    run: obj.rut.split('-')[0].replaceAll('.', ''),
+  }
+  const result = await conn.execute(query, params);
+  if ( result.rows.length > 0 ) {
+    row = result.rows[0];
+    if ( row.id_room === null ) {
+      return Astro.redirect('/sala');
+    }
+    //console.log(row);
+    //enviar correo y borrar cookie
+    nombres = row.names.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+
+
+    const querySala = `select s.id_sala, s.id_commune, s.id_sede, c.name as comuna, cp.name as sede, s.n_sala as sala, 
+                          s.cupo_max as cupos, s.reservas, s.dia_habilitada, s.horario, p.description as inicio
+                      from ndb_rooms s, ndb_commune c, ndb_campus cp, ndb_period p
+                      where s.id_commune = c.id AND 
+                          s.id_commune = cp.id_commune and
+                          s.id_sede = cp.id and
+                          s.periodo = p.id and
+                          s.id_sala = :id_sala`
+    const paramsSala = {
+      id_sala : row.id_room
+    }
+
+    const resultSala = await conn.execute(querySala, paramsSala);
+    if ( resultSala.rows.length > 0 ) {
+      rowSala = resultSala.rows[0];
+
+      console.log(rowSala);
+    }
+
+    Astro.cookies.delete('token');
+    Astro.cookies.delete('payload');
+
+  } else {
+    Astro.cookies.delete('token');
+    Astro.cookies.delete('payload');
+    return Astro.redirect('/');
+  }
+} else {
+  return Astro.redirect('/');
+}
+
+---
+
+<Layout title="Resumen Postulación">
+  <div class="box">
+    <div class="field">
+      <p>        
+        Hola {nombres},
+      </p>
+    </div>
+    <div class="field">
+      <p>
+        ¡Felicitaciones! Usted ha sido matriculada en el Diplomado en Competencias Digitales para el Empleo de Promueve, 
+        programa del Gobierno de Santiago, aprobado por el Consejo Regional Metropolitano y ejecutado por la Universidad Alberto Hurtado. 
+      </p>
+      <p>A continuación un resumen de su Postulación:</p>
+    </div>
+    <div class="field">
+      <table class="table table-hover table-striped ">
+        <tbody>
+          <tr>
+            <td>Comuna</td>
+            <td>{rowSala.comuna}</td>
+          </tr>
+          <tr>
+            <td>Sede</td>
+            <td>{rowSala.sede}</td>
+          </tr>
+          <tr>
+            <td>Sala</td>
+            <td>{rowSala.sala}</td>
+          </tr>
+          <tr>
+            <td>Inicio</td>
+            <td>{rowSala.inicio}</td>
+          </tr>
+          <tr>
+            <td>Horario</td>
+            <td>{horario[rowSala.horario]}</td>
+          </tr>
+          <tr>
+            <td>Día</td>
+            <td>{dias[rowSala.dia_habilitada]}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="width:100%;margin-top:50px">
+      <img style="width:100%" src="/static/assets/img/mapasede.png" />
+    </div>
+  </div>
+</Layout>

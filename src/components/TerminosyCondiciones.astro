@@ -1,0 +1,39 @@
+---
+  const site_key = '';
+  const { obj } = Astro.props;
+---
+<div class="box">
+  <p class="alert alert-warning">
+    La información declarada en su postulación será únicamente utilizada con el propósito de gestionar su proceso de matrícula en el diplomado, y en ningún caso estos serán compartidos con terceros.
+  </p>
+  <div class="mb-3 form-check">
+    {(obj.hasOwnProperty('aceptoTerminosYCondiciones') === false || obj.aceptoTerminosYCondiciones === null) && 
+      <input id="tyc" type="checkbox" class="form-check-input" name="aceptoTerminosYCondiciones" />
+    }
+    {obj.aceptoTerminosYCondiciones === 'on' && 
+      <input id="tyc" type="checkbox" class="form-check-input" name="aceptoTerminosYCondiciones" checked/>
+    }
+
+    <label class="form-check-label" for="tyc">
+      Acepto cumplir con el 
+      <a href="https://www.uahurtado.cl/wp-content/uploads/2023/07/Modificacin_Reglamento_Conducta_y_Convivencia_UAH.pdf" target="_blank">
+        Reglamento de conducta y convivencia de la Universidad Alberto Hurtado
+      </a>
+    </label>
+  </div>
+
+  {obj.aceptoTerminosYCondiciones === null && 
+    <div>
+      <p class="alert alert-danger">
+        Debe aceptar los terminos y condiciones.
+      </p>
+    </div>
+  }
+
+  <div class="field is-grouped is-grouped-right">
+    <div class="row" style="display: flex; text-align: -webkit-right">
+      <div class="g-recaptcha" data-sitekey={site_key} data-callback="enableBtn"></div>
+    </div>
+  </div>
+
+</div>

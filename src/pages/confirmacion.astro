@@ -1,0 +1,436 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { AES, enc } from 'crypto-ts';
+import { configEnv } from '../lib/vars';
+import { connect } from '@planetscale/database';
+
+//return Astro.redirect('/plazo-finalizado');
+
+const comunas = [
+  'Santiago', 
+  'Cerrillos', 
+  'Cerro Navia', 
+  'Conchalí', 
+  'El Bosque', 
+  'Estación Central', 
+  'Huechuraba', 
+  'Independencia', 
+  'La Cisterna', 
+  'La Florida', 
+  'La Granja', 
+  'La Pintana', 
+  'La Reina', 
+  'Las Condes', 
+  'Lo Barnechea', 
+  'Lo Espejo', 
+  'Lo Prado', 
+  'Macul', 
+  'Maipú', 
+  'Ñuñoa', 
+  'Pedro Aguirre Cerda', 
+  'Peñalolén', 
+  'Providencia', 
+  'Pudahuel', 
+  'Quilicura', 
+  'Quinta Normal', 
+  'Recoleta', 
+  'Renca',
+  'San Joaquín',
+  'San Miguel',
+  'San Ramón',
+  'Vitacura',
+  'Puente Alto',
+  'San Bernardo',
+];
+
+const bancos = [
+  'BANCOESTADO', 
+  'BANCO DE CHILE', 
+  'BANCO INTERNACIONAL', 
+  'SCOTIABANK-DESARROLLO', 
+  'BCI/MACH', 
+  'CORP-BANCA', 
+  'BICE', 
+  'HSBC BANK', 
+  'BANCO SANTANDER', 
+  'BANCO ITAU', 
+  'MUFG BANK, LTD.', 
+  'BANCO SECURITY', 
+  'BANCO FALABELLA', 
+  'BANCO RIPLEY/CHEK', 
+  'BANCO CONSORCIO', 
+  'BANCO BBVA', 
+  'COOPEUCH/DALE', 
+  'LA POLAR PREPAGO', 
+  'PREPAGO LOS HEROES', 
+  'PREPAGO TENPO', 
+  'TAPP CAJA LOS ANDES', 
+  'GLOBAL66', 
+  'COPEC PAY', 
+  'MERCADO PAGO'
+];
+
+const config = {
+  host: configEnv.DATABASE_HOST,
+  username: configEnv.DATABASE_USERNAME,
+  password: configEnv.DATABASE_PASSWORD,
+  fetch: (url: any, init: any) => {
+    delete init['cache']
+    return fetch(url, init)
+  }
+}
+
+
+let obj : {[key: string]: any} = {};
+let nombres = '';
+
+let confirmacion = false;
+let enlace = '';
+
+let correoExiste = false;
+
+if ( Astro.cookies.has('payload') ) {
+  let encrypted = Astro.cookies.get('payload')?.value as string;
+  let decrypted = AES.decrypt(encrypted, configEnv.SECRET_KEY);
+  obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+  //console.log('cookie', {obj});
+
+  if ( obj.finalizado === false ) {
+    return Astro.redirect('/formulario');
+  }
+
+  nombres = obj.nombres.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+
+  if (Astro.request.method === "POST") {
+
+    let dataToken = {
+      rut: obj.rut
+    }
+    let encrypted = AES.encrypt(JSON.stringify(dataToken), configEnv.SECRET_KEY).toString();
+    
+    let token = btoa(encrypted);
+    //const token = '';
+    enlace = `${Astro.url.origin}/login?token=${token}`;
+
+
+    //obj.email = 'luis.torresurrutia@gmail.com';
+
+    //guardar en base de datos y enviar link
+    let rowData = {
+      run: obj.rut.split('-')[0].replaceAll('.', ''),
+      dv: obj.rut.split('-')[1],
+      num_doc: obj.numeroSerie,
+      names: obj.nombres,
+      lastn: obj.apellido1,
+      lastnm: obj.apellido2,
+      marital_status: obj.estadocivil,
+      birthday: obj.fecha_nacimiento_MYSQL,
+      nationality: obj.nacionalidad,
+      sex: obj.sex,
+      email: obj.email,
+      cellphone: obj.telefono1,
+      educational_level: obj.nivel_escolaridad,
+      region_reside: 13,
+      commune_reside: obj.comuna,
+      address: obj.direccion,
+      support: obj.situacion_discapacidad,
+      need_attendance: obj.necesidad_asistencia || null,
+      have_children_under_5_years: obj.menor6,
+      num__children_under_5_years: obj.cuantos_menor6 || null,
+      have_children_under_18_years_isabilities: obj.situacion_discapacidad_mayor6,
+      num_children_under_18_years_isabilities: obj.cuantos_discapacidad || null,
+      bank: obj.banco,
+      account_type: obj.tipocuenta,
+      account_number: obj.numero_cuenta,
+      handle_a_computer: obj.pregunta1,
+      have_a_computer: obj.pregunta2,
+      have_permanent_internet: obj.pregunta3,
+      have_used_conferencing_platforms: obj.pregunta4,
+      reside_in_one_34_urban_commune: obj.pregunta5,
+      accept_terms: 1,
+      url_access: enlace,
+      comoseentero: obj.pregunta6
+    }
+
+    console.log(rowData);
+    
+    let columns = Object.keys(rowData).join(`,`);
+    let values = Object.keys(rowData).map((value) => `:${value}`).join(`,`);
+    //let onduplicate = Object.keys(rowData).map((value) => `${value} = :${value}`).join(`,`);
+
+    //console.log({columns, values, onduplicate});
+
+    try {
+      const conn = connect(config);
+      //console.log(conn);
+
+      // ON DUPLICATE KEY UPDATE ${onduplicate}
+      const query = `INSERT INTO ndb_postulant (${columns}) VALUES (${values})`;
+      const results1 = await conn.execute(query, rowData);
+
+      //console.log(results1);
+
+      if ( results1.rowsAffected > 0 ) {
+        //enviar correo con link.
+
+        let nombres = rowData.names.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+        let lastn = rowData.lastn.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+        let lastnm = rowData.lastnm.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+
+        const from = 'no-responder'; //Math.random().toString(36).substring(2,10);
+        const message = {
+          personalizations: [
+            {
+              to: [
+                {
+                  email: rowData.email,
+                  //name: 'Janice Doe'
+                }
+              ],
+              dynamic_template_data:{
+                nombre: `${nombres} ${lastn} ${lastnm}`,
+                link: rowData.url_access
+              }
+            }
+          ],
+          template_id : "d-d3fea4888287411284f13b409603d164",
+          from: {
+            email: `${ from }@uahurtado.b2g.cl`,
+            name: 'Equipo Promueve'
+          }
+        };
+
+        await fetch('https://api.sendgrid.com/v3/mail/send', {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${configEnv.SENDGRID_API_KEY}`
+          },
+          method: 'POST',
+          body: JSON.stringify(message),
+        });
+
+
+        confirmacion = true;
+        Astro.cookies.delete('payload');
+      }
+    } catch(e) {
+      //console.log({e});
+      //ir a ver si ya el correo existe....
+      const conn = connect(config);
+      const query = `select * from ndb_postulant where email = :email`;
+      const params = {
+        email: obj.email
+      }
+      const result = await conn.execute(query, params);
+      if ( result.rows.length > 0 ) {
+        correoExiste = true;
+
+        obj.estadoEmail = false;
+
+        let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+        Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+      }
+    }
+  }
+} else {
+  return Astro.redirect('/');
+}
+---
+
+<Layout title="Confirmación">
+  { confirmacion &&
+    <div class="box">
+      <div class="field">
+        <p>        
+          Hola {nombres},
+        </p>
+        <p>
+          Primera etapa de inscripción de “Ingreso de datos” completada. Debe continuar con la siguiente etapa, 
+          Le solicitamos que cargue los documentos necesarios para continuar con el proceso. 
+        </p>
+        <p>
+          Hemos enviado un enlace a su correo electrónico para que pueda proceder con la carga de los documentos solicitados.
+        </p>
+        <p>Si tienes alguna pregunta o inquietud acerca del proceso de postulación, no dudes en contactarnos a través de nuestro call center +56 22 582 8796.</p> 
+        <p>
+          Gracias por su paciencia y colaboración.
+        </p>
+      </div>
+      <div class="field mt-3">
+        <div class="control row">
+          <div class="col-12" style="text-align: right">
+            <p>
+              <a href={enlace} class="btn btn-success">&raquo; Continuar</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+
+  {!confirmacion &&
+
+    <div class="box">
+      <p>        
+        Hola {nombres},
+      </p>
+      <p>
+        Por favor, revisa esta información cuidadosamente. Si todo es correcto, haz clic en el botón de <b>confirmar</b>.
+      </p>
+      <p>
+        En caso de que necesites realizar alguna corrección, simplemente vuelve a <b>editar</b> el formulario antes de confirmar.
+      </p>
+      <p>
+         Si tienes alguna pregunta o inquietud acerca del proceso de postulación, no dudes en contactarnos a través de nuestro call center +56 22 582 8796.
+      </p>
+    </div>
+    <div class="box">
+      {correoExiste &&
+        <div class="alert alert-warning" role="alert">
+          <p>Al momento de registrar su postulación se detecto que el correo <b>{obj.email}</b> ya cuenta con una postulación en curso</p>
+          <p>Por favor edite su postulación con un nuevo correo electrónico</p>
+          <a href="/formulario" class="btn btn-warning">&raquo; Editar</a>
+        </div>
+      }
+      <table class="table table-hover table-striped ">
+        <tbody>
+          <tr>
+            <td>RUN</td>
+            <td>{obj.rut}</td>
+          </tr>
+          <tr>
+            <td>Numero de documento</td>
+            <td>{obj.numeroSerie}</td>
+          </tr>
+          <tr>
+            <td>Nombres</td>
+            <td>{obj.nombres}</td>
+          </tr>
+          <tr>
+            <td>Primer Apellido</td>
+            <td>{obj.apellido1}</td>
+          </tr>
+          <tr>
+            <td>Segundo Apellido</td>
+            <td>{obj.apellido2}</td>
+          </tr>
+          <tr>
+            <td>Fecha de Nacimiento</td>
+            <td>{obj.fecha_nacimiento}</td>
+          </tr>
+          <tr>
+            <td>Nacionalidad</td>
+            <td>{obj.nacionalidad}</td>
+          </tr>
+          <tr>
+            <td>Estado Civil</td>
+            {obj.estadocivil === '1' && <td>Soltera</td> }
+            {obj.estadocivil === '2' && <td>Casada</td> }
+            {obj.estadocivil === '3' && <td>Divorciada</td> }
+            {obj.estadocivil === '4' && <td>Viuda</td> }
+            {obj.estadocivil === '5' && <td>Separada</td> }
+            {obj.estadocivil === '6' && <td>Conviviente</td> }
+          </tr>
+          <tr>
+            <td>Correo electrónico</td>
+            <td>{obj.email}</td>
+          </tr>
+          <tr>
+            <td>Telefono</td>
+            <td>{obj.telefono1}</td>
+          </tr>
+          <tr>
+            <td>Nivel de escolaridad</td>
+            {obj.nivel_escolaridad === '1' && <td>Enseñanza media completa</td> }
+            {obj.nivel_escolaridad === '2' && <td>Enseñanza superior incompleta</td> }
+            {obj.nivel_escolaridad === '3' && <td>Enseñanza superior completa</td> }
+            {obj.nivel_escolaridad === '4' && <td>Técnico completo</td> }
+            {obj.nivel_escolaridad === '5' && <td>Técnico incompleto</td> }
+          </tr>
+          <tr>
+            <td>Comuna</td>
+            <td>{comunas[parseInt(obj.comuna) - 1]}</td>
+          </tr>
+          <tr>
+            <td>Dirección</td>
+            <td>{obj.direccion}</td>
+          </tr>
+          <tr>
+            <td>Declaro que la información entregada es fidedigna y en caso de demostrar lo contrario la matrícula será cancelada</td>
+            <td>Sí</td>
+          </tr>
+          <tr>
+            <td>Situación de Discapacidad</td>
+            {obj.situacion_discapacidad === '1' && <td>SI</td> }
+            {obj.situacion_discapacidad === '2' && <td>NO</td> }
+          </tr>
+          {obj.situacion_discapacidad === '1' &&
+            <tr>
+              <td>Necesidad de Asistencia</td>
+              {obj.necesidad_asistencia === '1' && <td>SI</td> }
+              {obj.necesidad_asistencia === '2' && <td>NO</td> }
+            </tr>
+          }
+          <tr>
+            <td>Tiene hijas/os menores de 5 años 11 meses</td>
+            {obj.menor6 === '1' && <td>SI, {obj.cuantos_menor6} hijas/os</td> }
+            {obj.menor6 === '2' && <td>NO</td> }
+          </tr>
+          <tr>
+            <td>Tiene hijas/os menores de 18 años en situación de discapacidad</td>
+            {obj.situacion_discapacidad_mayor6 === '1' && <td>SI, {obj.cuantos_discapacidad} hijas/os</td> }
+            {obj.situacion_discapacidad_mayor6 === '2' && <td>NO</td> }
+          </tr>
+          <tr>
+            <td>Puede realizar acciones como navegar por internet, buscar información utilizando un navegador web, enviar y recibir correos electrónicos, y crear y editar documentos mediante programas como Word o Google Docs</td>
+            {obj.pregunta1 === '1' && <td>SI</td> }
+            {obj.pregunta1 === '2' && <td>NO</td> }
+          </tr>
+          <tr>
+            <td>Cuenta con un computador de escritorio o notebook para realizar el Diplomado</td>
+            {obj.pregunta2 === '1' && <td>SI</td> }
+            {obj.pregunta2 === '2' && <td>NO</td> }
+          </tr>
+          <tr>
+            <td>Cuenta con conexión a internet permanente</td>
+            {obj.pregunta3 === '1' && <td>SI</td> }
+            {obj.pregunta3 === '2' && <td>NO</td> }
+          </tr>
+          <tr>
+            <td>Ha utilizado las plataformas Zoom y Google Meet alguna vez</td>
+            {obj.pregunta4 === '1' && <td>SI</td> }
+            {obj.pregunta4 === '2' && <td>NO</td> }
+          </tr>
+          <tr>
+            <td>Reside en una de las 34 comunas urbanas de la Región Metropolitana</td>
+            {obj.pregunta5 === '1' && <td>SI</td> }
+            {obj.pregunta5 === '2' && <td>NO</td> }
+          </tr>
+          <tr>
+            <td>Acepto los términos y condiciones</td>
+            <td>Sí</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="box mb-3">
+      <div class="field">
+        <div class="control row">
+          <div class="col-6">
+            <p>
+              <a href="/formulario" class="btn btn-warning">&raquo; Editar</a>
+            </p>
+          </div>
+          <div class="col-6" style="text-align: right">
+            <form id="frmResumen" method="POST">
+              <button id="btnSubmitInscripcion" type="submit" class="btn btn-primary">&raquo; Confirmar</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+</Layout>

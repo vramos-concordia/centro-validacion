@@ -1,0 +1,66 @@
+---
+const { obj } = Astro.props;
+
+const bancos = [
+  'BANCOESTADO', 
+  'BANCO DE CHILE', 
+  'BANCO INTERNACIONAL', 
+  'SCOTIABANK-DESARROLLO', 
+  'BCI/MACH', 
+  'CORP-BANCA', 
+  'BICE', 
+  'HSBC BANK', 
+  'BANCO SANTANDER', 
+  'BANCO ITAU', 
+  'MUFG BANK, LTD.', 
+  'BANCO SECURITY', 
+  'BANCO FALABELLA', 
+  'BANCO RIPLEY/CHEK', 
+  'BANCO CONSORCIO', 
+  'BANCO BBVA', 
+  'COOPEUCH/DALE', 
+  'LA POLAR PREPAGO', 
+  'PREPAGO LOS HEROES', 
+  'PREPAGO TENPO', 
+  'TAPP CAJA LOS ANDES', 
+  'GLOBAL66', 
+  'COPEC PAY', 
+  'MERCADO PAGO'
+];
+---
+<div id="divDatosBancarios" class="box">
+  
+  <div class="field">
+    <label class="label" for="banco">Banco</label>
+    <div class="control">
+      <div>
+        <select id="banco" name="banco" class="form-select" required>
+          <option value="">Seleccione una opción</option>
+          {bancos.map((banco, index) => (
+            <option value={index + 1}>{banco}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="field">
+    <label class="label" for="tipocuenta">Tipo de cuenta</label>
+    <div class="control">
+      <div>
+        <select id="tipocuenta" name="tipocuenta" class="form-select" required>
+          <option value="">Seleccione una opción</option>
+          <option value="1">Cuenta Corriente</option>
+          <option value="2">Cuenta Vista</option>
+          <option value="3">Cuenta Ahorro</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="field">
+    <label class="label" for="numero_cuenta">Nro. de cuenta</label>
+    <div class="input-group flex-nowrap">
+      <span class="input-group-text" id="addon-wrapping"><img src="/static/assets/img/key.svg" alt=""/></span>
+      <input type="number" id="numero_cuenta" name="numero_cuenta" class="form-control" placeholder="" value="" autocomplete="off" required/>
+    </div>
+  </div>
+</div>

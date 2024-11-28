@@ -1,0 +1,383 @@
+---
+import { configEnv } from '../lib/vars';
+import { AES, enc } from 'crypto-ts';
+import { connect } from '@planetscale/database';
+import Layout from '../layouts/Layout.astro';
+
+
+const horario : {[key: string]: any}= {
+  'am' : 'AM [09:00 - 12:45]',
+  'pm' : 'PM [14:30 - 18:00]',
+  'vp' : 'VP [19:00 - 22:00]'
+}
+
+const dias: {[key: string]: any} = {
+  'L' : 'Lunes',
+  'M' : 'Martes',
+  'X' : 'Miercoles',
+  'J' : 'Jueves',
+  'V' : 'Viernes',
+  'S' : 'Sabado',
+  'D' : 'Domingo'
+}
+
+
+const config = {
+  host: configEnv.DATABASE_HOST,
+  username: configEnv.DATABASE_USERNAME,
+  password: configEnv.DATABASE_PASSWORD,
+  fetch: (url: any, init: any) => {
+    delete init['cache']
+    return fetch(url, init)
+  }
+}
+
+let obj : {[key: string]: any} = {};
+let row : {[key: string]: any} = {};
+let nombres = '';
+
+let documentsPendiente = false;
+let cursoCompleto = false;
+
+let tbl = '';
+let jsonConfig : {[key: string]: any} = {};
+
+let selectComuna = '';
+let selectSede = '';
+let selectHorario = '';
+
+let comunaSeleccionada = '';
+let sedeSeleccionada = '';
+let horarioSeleccionado = '';
+
+if ( Astro.cookies.has('token') ) {
+  //recuperar valores de la cookie
+  let token = Astro.cookies.get('token')?.value as string;
+  let decodeBase64Token = atob(token);
+  let decrypted = AES.decrypt(decodeBase64Token, configEnv.SECRET_KEY);
+  obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+  //console.log('cookie-documentacion', {obj});
+
+  const conn = connect(config);
+  
+  const query = `select * from ndb_postulant where run = :run`;
+  const params = {
+    run: obj.rut.split('-')[0].replaceAll('.', ''),
+  }
+  const result = await conn.execute(query, params);
+  if ( result.rows.length > 0 ) {
+    row = result.rows[0];
+    //console.log(row);
+
+    if ( row.id_room !== null ) {
+      return Astro.redirect('/resumen');
+    }
+
+    nombres = `${row.names} ${row.lastn} ${row.lastnm}`;
+
+    //revisar si tiene algun documento en 3.
+    const query0 = `select * from ndb_documents where dni = :dni and status = 3`;
+    const params0 = {
+      dni: obj.rut.split('-')[0].replaceAll('.', ''),
+    }
+    const result0 = await conn.execute(query0, params0);
+    if ( result0.rows.length > 0 ) {
+      documentsPendiente = true;
+    } else {
+
+      //si tengo un POST primero procesarlo....
+      if (Astro.request.method === "POST") {
+        const data = await Astro.request.formData();
+
+        //console.log(data);
+
+        comunaSeleccionada = data.get('comuna_sala') as string;
+        sedeSeleccionada = data.get('sede_sala') as string;
+        horarioSeleccionado = data.get('horario_sala') as string;
+        const sala = data.get('sala');
+        //console.log({comunaSeleccionada, sedeSeleccionada, horarioSeleccionado, sala})
+        
+        //tomar la reserva.
+        if ( sala !== null ) {
+          try {
+            const queryU = `update ndb_rooms set reservas = reservas + 1 where id_sala = :id_sala`;
+            const paramsU = {
+              id_sala : data.get('sala')
+            }
+            const resultU = await conn.execute(queryU, paramsU);
+            console.log(resultU);
+            if ( resultU.rowsAffected > 0) {
+              //actualizar al postulant el id-sala
+              const queryP = `update ndb_postulant set id_room = :id_room  where run = :run`;
+              const paramsP = {
+                run: row.run,
+                id_room : data.get('sala')
+              }
+              const resultP = await conn.execute(queryP, paramsP);
+              console.log(resultP);
+              if ( resultP.rowsAffected > 0 ) {
+                return Astro.redirect('/resumen');
+              }
+            }
+          } catch(e) {
+            //console.log(e);
+            cursoCompleto = true;
+          }
+        }
+      }
+
+      const query1 = `select s.id_commune, c.name 
+                      from ndb_rooms s, ndb_commune c, ndb_campus cp
+                      where s.id_commune = c.id AND 
+                          s.id_commune = cp.id_commune and
+                          s.id_sede = cp.id and
+                          s.reservas < s.cupo_max
+                      group by s.id_commune`;
+      const result1 = await conn.execute(query1);
+
+      if ( result1.rows.length > 0 ) {
+        for ( let i = 0; i < result1.rows.length; i++ ) {
+          const row0: any = result1.rows[i];
+          if ( comunaSeleccionada ==  row0.id_commune) {
+            selectComuna += `<option value="${row0.id_commune}" selected>${row0.name}</option>`;
+          } else {
+            selectComuna += `<option value="${row0.id_commune}">${row0.name}</option>`;
+          }
+        }
+      }
+
+      //si tengo una comuna seleccionada, obtener sedes.
+      if ( comunaSeleccionada != '' ) {
+        const query2 = `select s.id_sede, cp.name 
+                      from ndb_rooms s, ndb_commune c, ndb_campus cp
+                      where s.id_commune = c.id AND 
+                          s.id_commune = cp.id_commune and
+                          s.id_sede = cp.id and
+                          s.reservas < s.cupo_max and
+                          s.id_commune = ${comunaSeleccionada}
+                      group by s.id_sede`;
+        //console.log(query2);
+        const result2 = await conn.execute(query2);
+
+        if ( result2.rows.length > 0 ) {
+          for ( let i = 0; i < result2.rows.length; i++ ) {
+            const row0: any = result2.rows[i];
+            //console.log(row0);
+            if ( sedeSeleccionada == row0.id_sede ) {
+              selectSede += `<option value="${row0.id_sede}" selected>${row0.name}</option>`;
+            } else {
+              selectSede += `<option value="${row0.id_sede}">${row0.name}</option>`;
+            }
+          }
+        }
+      }
+
+      if ( comunaSeleccionada != '' && sedeSeleccionada != '') {
+        const query3 = `select s.horario 
+                      from ndb_rooms s, ndb_commune c, ndb_campus cp
+                      where s.id_commune = c.id AND 
+                          s.id_commune = cp.id_commune and
+                          s.id_sede = cp.id and
+                          s.reservas < s.cupo_max and
+                          s.id_commune = ${comunaSeleccionada} and
+                          s.id_sede = ${sedeSeleccionada}
+                      group by s.horario`;
+        //console.log(query3);
+        const result3 = await conn.execute(query3);
+
+        if ( result3.rows.length > 0 ) {
+          for ( let i = 0; i < result3.rows.length; i++ ) {
+            const row0: any = result3.rows[i];
+            console.log(row0);
+            if ( horarioSeleccionado == row0.horario ) {
+              selectHorario += `<option value="${row0.horario}" selected>${horario[row0.horario]}</option>`;
+            } else {
+              selectHorario += `<option value="${row0.horario}">${horario[row0.horario]}</option>`;
+            }
+          }
+        }
+      }
+
+
+      if ( comunaSeleccionada != '' && sedeSeleccionada != '' && horarioSeleccionado != '') {
+        const query1 = `select s.id_sala, s.id_commune, s.id_sede, c.name as comuna, cp.name as sede, s.n_sala as sala, 
+                            s.cupo_max as cupos, s.reservas, s.dia_habilitada, s.horario, p.description as inicio
+                        from ndb_rooms s, ndb_commune c, ndb_campus cp, ndb_period p
+                        where s.id_commune = c.id AND 
+                            s.id_commune = cp.id_commune and
+                            s.id_sede = cp.id and
+                            s.periodo = p.id and
+                            s.reservas < s.cupo_max and
+                            s.id_commune = ${comunaSeleccionada} and
+                            s.id_sede = ${sedeSeleccionada} and
+                            s.horario = '${horarioSeleccionado}'`;
+        const result1 = await conn.execute(query1);
+
+        if ( result1.rows.length > 0 ) {
+          tbl = `
+            <table class="table table-hover table-striped table-bordered">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Dia</th>
+                  <th>Sala</th>
+                  <th>Cupos</th>
+                  <th>Fecha Inicio</th>
+                </tr>
+              </thead>
+              <tbody>
+            `;
+
+          for ( let i = 0; i < result1.rows.length; i++ ) {
+            let row0: any = result1.rows[i];
+
+            tbl += `
+              <tr>
+                <td><input type="radio" name="sala" value=${row0.id_sala} required/></td>
+                <td>${dias[row0.dia_habilitada] || ''}</td>
+                <td>${row0.sala}</td>
+                <td>${row0.cupos - (row0.reservas || 0)}</td>
+                <td>${row0.inicio}</td>
+              </tr>
+            `;
+          }
+
+          tbl += `
+                  </tbody>
+                </table>
+              `;
+        }
+      }
+
+    }
+
+  }
+}
+---
+<Layout title="Finalizar">
+   <div class="box">
+    <div class="field">
+      <p>        
+        Hola {nombres},
+      </p>
+    </div>
+    { documentsPendiente &&
+      <div class="alert alert-warning" style="text-align: justify;">
+        Le solicitamos esperar la <b>aprobación</b> de su documento que <strong>acredita su nivel de enseñanza media completa</strong> para continuar con la seleccón de Sede y Horario.</b>
+      </div>
+    }
+
+    { cursoCompleto &&
+      <div class="alert alert-danger" style="text-align: justify;">
+        La sala seleccionada ya no esta disponible
+      </div>
+    }
+
+    {!documentsPendiente && 
+      
+      <form id="frmConfirmarSala" method="POST">
+        <div class="alert alert-info" style="text-align: justify;">
+          A continuación seleccione la sede y horario de su preferencia.
+        </div>
+        <div class="box">
+          <div class="field">
+            <label class="label" for="comuna_sala">Comuna</label>
+            <div class="control">
+              <div>
+                <select id="comuna_sala" name="comuna_sala" class="form-select">
+                  <option value="">Seleccione una opción</option>
+                  <Fragment set:html={selectComuna} />
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label" for="sede_sala">Sede</label>
+            <div class="control">
+              <div>
+                <select id="sede_sala" name="sede_sala" class="form-select">
+                  <option value="">Seleccione una opción</option>
+                  <Fragment set:html={selectSede} />
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label" for="horario_sala">Horario</label>
+            <div class="control">
+              <div>
+                <select id="horario_sala" name="horario_sala" class="form-select">
+                  <option value="">Seleccione una opción</option>
+                  <Fragment set:html={selectHorario} />
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        { tbl !== '' && 
+          <div class="box">
+            <Fragment set:html={tbl} />
+          </div>
+          <div class="field">
+            <div class="control row">
+              <div class="col-12" style="text-align: right">
+                <button id="btnConfirmarSala" type="submit" class="btn btn-primary">&raquo; Confirmar</button>
+              </div>
+            </div>
+          </div>
+        }
+      </form>
+    }
+   <div style="width:100%;margin-top:50px">
+      <img style="width:100%" src="/static/assets/img/mapasede.png" />
+    </div>
+
+  </div>
+  <script>
+    const loadingDiv = document.getElementById('loading') as HTMLElement;
+    function showSpinner() { loadingDiv.style.visibility = 'visible'; }
+    //function hideSpinner() { loadingDiv.style.visibility = 'hidden'; }
+
+    if ( document.getElementById('btnConfirmarSala') ) {
+
+      (document.getElementById("btnConfirmarSala") as HTMLInputElement).addEventListener('click', function(event) {
+        event.preventDefault();
+        const frm = (document.getElementById('frmConfirmarSala') as HTMLFormElement);
+        frm.reportValidity();
+        frm.classList.add('was-validated')
+
+        if (frm.checkValidity() === true ) {
+          showSpinner();
+          frm.submit();
+        }
+      });
+    }
+
+    if ( document.getElementById('comuna_sala') ) {
+      (document.getElementById('comuna_sala') as HTMLElement).addEventListener('change', function(){
+        showSpinner();
+        const frm = (document.getElementById('frmConfirmarSala') as HTMLFormElement);
+        frm.submit();
+      });
+    }
+
+    if ( document.getElementById('sede_sala') ) {
+      (document.getElementById('sede_sala') as HTMLElement).addEventListener('change', function(){
+        showSpinner();
+        const frm = (document.getElementById('frmConfirmarSala') as HTMLFormElement);
+        frm.submit();
+      });
+    }
+
+    if ( document.getElementById('horario_sala') ) {
+      (document.getElementById('horario_sala') as HTMLElement).addEventListener('change', function(){
+        showSpinner();
+        const frm = (document.getElementById('frmConfirmarSala') as HTMLFormElement);
+        frm.submit();
+      });
+    }
+
+
+  </script>
+</Layout>

@@ -1,0 +1,250 @@
+---
+import { AES, enc } from 'crypto-ts';
+import { configEnv } from '../lib/vars';
+import { connect } from '@planetscale/database';
+import Telefono from "../components/Telefono.astro";
+import Layout from "../layouts/Layout.astro";
+import Nivelescolaridad from '../components/Nivelescolaridad.astro';
+import Direccion from '../components/Direccion.astro';
+import Discapacidad from '../components/Discapacidad.astro';
+import ServiciosdeCuidados from '../components/ServiciosdeCuidados.astro';
+import TerminosyCondiciones from '../components/TerminosyCondiciones.astro';
+import EstadoCivil from '../components/EstadoCivil.astro';
+
+const config = {
+  host: configEnv.DATABASE_HOST,
+  username: configEnv.DATABASE_USERNAME,
+  password: configEnv.DATABASE_PASSWORD,
+  fetch: (url: any, init: any) => {
+    delete init['cache']
+    return fetch(url, init)
+  }
+}
+
+let nombres = '';
+let obj : {[key: string]: any} = {};
+let errores: string[] = [];
+
+if ( Astro.cookies.has('token') ) {
+
+  let token = Astro.cookies.get('token')?.value as string;
+  let decodeBase64Token = atob(token);
+  let decrypted = AES.decrypt(decodeBase64Token, configEnv.SECRET_KEY);
+  const objToken = JSON.parse(decrypted.toString(enc.Utf8).toString());
+
+  console.log({objToken});
+
+  const conn = connect(config);
+  
+  const query = `select * from ndb_postulant where run = :run`;
+  const params = {
+    run: objToken.rut.split('-')[0].replaceAll('.', ''),
+  }
+  const result = await conn.execute(query, params);
+  if ( result.rows.length > 0 ) {
+    const row = result.rows[0];
+    console.log(row);
+
+    if ( row.post_finished === 1 ) {
+      return Astro.redirect('/finalizar');
+    }
+
+    nombres = `${row.names} ${row.lastn} ${row.lastnm}`;
+    obj.estadocivil = row.marital_status;
+    obj.telefono1 = row.cellphone;
+    obj.telefono2 = row.cellphone;
+    obj.nivel_escolaridad = row.educational_level.toString();
+    obj.comuna = row.commune_reside;
+    obj.direccion = row.address;
+    obj.declaraciondireccion = 'on';
+    obj.situacion_discapacidad = row.support.toString();
+    obj.necesidad_asistencia = row.need_attendance !== null ? row.need_attendance.toString() : '';
+    obj.menor6 = row.have_children_under_5_years.toString();
+    obj.cuantos_menor6 = row.num__children_under_5_years !== null ? row.num__children_under_5_years.toString() : '';
+    obj.situacion_discapacidad_mayor6 = row.have_children_under_18_years_isabilities.toString();
+    obj.cuantos_discapacidad = row.num_children_under_18_years_isabilities !== null ? row.num_children_under_18_years_isabilities.toString() : '';
+    console.log({obj});
+
+
+    if (Astro.request.method === "POST") {
+      const data = await Astro.request.formData();
+      console.log(data);
+
+      obj.telefono1 = data.get('telefono1') as string;
+      obj.telefono2 = data.get('telefono2') as string;
+      obj.estadocivil = data.get('estadocivil');
+      obj.nivel_escolaridad = data.get('nivel_escolaridad');
+      obj.comuna = data.get('comuna');
+      obj.direccion = data.get('direccion');
+      obj.declaraciondireccion = data.get('declaraciondireccion');
+      obj.situacion_discapacidad = data.get('situacion_discapacidad');
+      obj.necesidad_asistencia = data.get('necesidad_asistencia');
+      obj.menor6 = data.get('menor6');
+      obj.cuantos_menor6 = data.get('cuantos_menor6');
+      obj.situacion_discapacidad_mayor6 = data.get('situacion_discapacidad_mayor6');
+      obj.cuantos_discapacidad = data.get('cuantos_discapacidad');
+      obj.aceptoTerminosYCondiciones = data.get('aceptoTerminosYCondiciones');
+
+      if ( obj.estadocivil === null || obj.estadocivil === '' ) {
+        errores.push('Estado Civil');
+      }
+      
+      if ( obj.telefono1 === null || obj.telefono1 === '' ) {
+        errores.push('Teléfono');
+      }
+
+      if ( obj.telefono2 === null || obj.telefono2 === '' ) {
+        errores.push('Teléfono');
+      }
+
+      if ( obj.telefono1 !== obj.telefono2) {
+        errores.push('Los números de teléfono ingresados no son iguales.');
+      }
+
+      if ( obj.nivel_escolaridad === null || obj.nivel_escolaridad === '' ) {
+        errores.push('Nivel de escolaridad');
+      }
+
+      if ( obj.comuna === null || obj.comuna === '' ) {
+        errores.push('Comuna');
+      }
+
+      if ( obj.direccion === null || obj.direccion === '' ) {
+        errores.push('Dirección');
+      }
+
+      if ( obj.declaraciondireccion === null || obj.declaraciondireccion === '' ) {
+        errores.push('Debe declarar que la información de su dirección entregada es fidedigna.');
+      }
+
+      if ( obj.situacion_discapacidad === null || obj.situacion_discapacidad === '' ) {
+        errores.push('Situación de Discapacidad');
+      }
+      
+      if ( obj.situacion_discapacidad === '1' ) {
+        if ( obj.necesidad_asistencia === null || obj.necesidad_asistencia === '' ) {
+          errores.push('Necesidad de Asistencia');
+        }
+      }
+      
+      if ( obj.menor6 === null || obj.menor6 === '' ) {
+        errores.push('Tiene hijas/os menores de 5 años 11 meses');
+      }
+
+      if ( obj.menor6 === '1' ) {
+        if ( obj.cuantos_menor6 === null || obj.cuantos_menor6 === '' ) {
+          errores.push('Cuántos hijas/os menores de 5 años 11 meses');
+        }
+      }
+
+
+      if ( obj.situacion_discapacidad_mayor6 === null || obj.situacion_discapacidad_mayor6 === '' ) {
+        errores.push('Tiene hijas/os entre 6 a 18 años en situación de discapacidad');
+      }
+
+      if ( obj.situacion_discapacidad_mayor6 === '1' ) {
+        if ( obj.cuantos_discapacidad === null || obj.cuantos_discapacidad === '' ) {
+          errores.push('Cuántos hijas/os entre 6 a 18 años en situación de discapacidad');
+        }
+      }
+
+      if ( obj.aceptoTerminosYCondiciones === null || obj.aceptoTerminosYCondiciones === '' ) {
+        errores.push('Debe aceptar los terminos y condiciones.');
+      }
+
+      if ( errores.length === 0 ) {
+        
+        let rowData = {
+          cellphone: obj.telefono1,
+          educational_level: obj.nivel_escolaridad,
+          commune_reside: obj.comuna,
+          address: obj.direccion,
+          support: obj.situacion_discapacidad,
+          need_attendance: obj.necesidad_asistencia || null,
+          have_children_under_5_years: obj.menor6,
+          num__children_under_5_years: obj.cuantos_menor6 || null,
+          have_children_under_18_years_isabilities: obj.situacion_discapacidad_mayor6,
+          num_children_under_18_years_isabilities: obj.cuantos_discapacidad || null,
+          accept_terms: 1,
+        }
+
+        let columnasUpdate = Object.keys(rowData).map((value) => `${value} = :${value}`).join(`,`);
+
+        const query = `update ndb_postulant set ${columnasUpdate} where run = ${row.run}`;
+        //console.log(query);
+        const results1 = await conn.execute(query, rowData);
+
+        if ( results1.rowsAffected > 0 ) {
+          return Astro.redirect('/documentacion');
+        }
+      }
+    }
+
+
+  } else {
+    Astro.cookies.delete('token');
+    return Astro.redirect('/');
+  }
+
+} else {
+  Astro.cookies.delete('token');
+  return Astro.redirect('/');
+}
+
+---
+
+<Layout title="UAH.">
+  <form id="frmEdit" method="POST">
+    <div class="box">
+      <div class="field">
+        <p>        
+          Hola {nombres},
+        </p>
+        <p>Puedes editar la siguiente información</p>
+      </div>
+      {errores.length > 0 && 
+      
+        <div class="alert alert-danger" role="alert">
+          <strong>Corrija los siguientes errores: </strong>
+          <ul class="m-1">
+            {errores.map((item: any) => (
+              <li><Fragment set:html={item} /></li>
+            ))}
+          </ul>
+        </div>
+      }
+      <EstadoCivil obj={obj}></EstadoCivil>
+      <Telefono obj={obj}></Telefono>
+      <Nivelescolaridad obj={obj}></Nivelescolaridad>
+      <Direccion obj={obj}></Direccion>
+      <Discapacidad obj={obj}></Discapacidad>
+      <ServiciosdeCuidados obj={obj}></ServiciosdeCuidados>
+      <TerminosyCondiciones obj={obj}></TerminosyCondiciones>
+  
+      <div class="field">
+        <div class="control row">
+          <div class="col-12" style="text-align: right">
+            <button id="btnSubmitEditar" type="submit" class="btn btn-primary">&raquo; Siguiente</button>
+          </div>
+        </div>
+      </div>
+  
+    </div>
+  </form>
+
+  <script>
+
+    if ( document.getElementById('btnSubmitEditar') ) {
+
+      (document.getElementById("btnSubmitEditar") as HTMLInputElement).addEventListener('click', function(event) {
+        event.preventDefault();
+        const frm = (document.getElementById('frmEdit') as HTMLFormElement);
+        frm.reportValidity();
+        frm.classList.add('was-validated')
+        if (frm.checkValidity() === true ) {
+          frm.submit();
+        }
+      });
+    }
+  </script>
+</Layout>

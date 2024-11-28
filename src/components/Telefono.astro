@@ -1,0 +1,75 @@
+---
+const { obj } = Astro.props;
+---
+
+<div class="box">
+  <div class="field">
+    <label class="label" for="telefono1">Teléfono</label>
+    <div class="input-group flex-nowrap">
+      <span class="input-group-text" id="addon-wrapping">
+        <img src="/static/assets/img/whatsapp.svg" alt=""/></span>
+        <input type="text" id="telefono1" name="telefono1" class="form-control"  value={obj.telefono1} required autocomplete="off"/>
+    </div>
+  </div>
+  <div class="field">
+    <label class="label" for="telefono2">Repita Teléfono</label>
+    <div class="input-group flex-nowrap mt-2">
+      <span class="input-group-text" id="addon-wrapping">
+        <img src="/static/assets/img/whatsapp.svg" alt=""/></span>
+        <input type="text" id="telefono2" name="telefono2" class="form-control"  value={obj.telefono2} required autocomplete="off"/>
+    </div>
+  </div>
+  <div id="telefonoNoCoinciden" class="field d-none">
+    <p class="alert alert-danger">Los números de teléfono ingresados no son iguales. Por favor, verifique y asegúrese de que ambos números coincidan antes de continuar.</p>
+  </div>
+</div>
+<script>
+  import IMask from 'imask';
+
+  const divtelefonoNoCoinciden = document.getElementById('telefonoNoCoinciden') as HTMLInputElement;
+
+  const telefono1 = document.getElementById('telefono1') as HTMLInputElement;
+  const telefono2 = document.getElementById('telefono2') as HTMLInputElement;
+
+  telefono1.setCustomValidity("Telefono no valido");
+  telefono2.setCustomValidity("Telefono no valido");
+
+  const maskOptions = {
+    mask: '+{56 9} 0000 0000',
+    lazy: false,
+  };
+
+  const mask1 = IMask(telefono1, maskOptions);
+  const mask2 = IMask(telefono2, maskOptions);
+
+  mask1.on('accept', () => {
+    const telefono1: HTMLInputElement = (document.getElementById('telefono1') as HTMLInputElement);
+    telefono1.setCustomValidity(telefono1.value.includes('_') === true ? "Telefono no valido" : "");
+  });
+  mask2.on('accept', () => {
+    const telefono2: HTMLInputElement = (document.getElementById('telefono2') as HTMLInputElement);
+    telefono2.setCustomValidity(telefono2.value.includes('_') === true ? "Telefono no valido" : "");
+  });
+
+
+  const validate = () => {
+    if ( mask1.value.includes('_') === false && mask2.value.includes('_') === false ) {
+      if ( mask1.value !== mask2.value ) {
+        telefono1.setCustomValidity("Telefono no valido");
+        telefono2.setCustomValidity("Telefono no valido");
+
+        divtelefonoNoCoinciden.classList.remove("d-none");
+      } else {
+        divtelefonoNoCoinciden.classList.add("d-none");
+        telefono1.setCustomValidity("");
+        telefono2.setCustomValidity("");
+      }
+    }
+  }
+
+  mask1.on('complete', validate);
+  mask2.on('complete', validate);
+
+  validate();
+  
+</script>

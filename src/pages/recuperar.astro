@@ -1,0 +1,158 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { AES, enc } from 'crypto-ts';
+import { configEnv } from '../lib/vars';
+import { connect } from '@planetscale/database';
+import { obfuscateEmail } from "../lib/utils";
+
+const config = {
+  host: configEnv.DATABASE_HOST,
+  username: configEnv.DATABASE_USERNAME,
+  password: configEnv.DATABASE_PASSWORD,
+  fetch: (url: any, init: any) => {
+    delete init['cache']
+    return fetch(url, init)
+  }
+}
+
+let obj : {[key: string]: any} = {};
+let row : {[key: string]: any} = {};
+let obfuscatedEmail  = '';
+let linkEnviado = false;
+
+if ( Astro.cookies.has('payload') ) {
+  //recuperar valores de la cookie
+  let encrypted = Astro.cookies.get('payload')?.value as string;
+  let decrypted = AES.decrypt(encrypted, configEnv.SECRET_KEY);
+  obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+  console.log('cookieIndex', {obj});
+
+  const conn = connect(config);
+  const query = `select * from ndb_postulant where run = :run`;
+  const params = {
+    run: obj.rut.split('-')[0].replaceAll('.', ''),
+  }
+  const result = await conn.execute(query, params);
+  if ( result.rows.length > 0 ) {
+    row = result.rows[0];
+    obfuscatedEmail = obfuscateEmail(row.email, 0.5, 0.5);
+  } else {
+    return Astro.redirect('/limpiar');
+  }
+
+  if (Astro.request.method === "POST") {
+    console.log(row);
+    linkEnviado = true;
+    //enviar correo.
+
+    let nombres = row.names.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+    let lastn = row.lastn.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+    let lastnm = row.lastnm.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+
+    const from = 'no-responder'; //Math.random().toString(36).substring(2,10);
+    const message = {
+      personalizations: [
+        {
+          to: [
+            {
+              email: row.email,
+              //name: 'Janice Doe'
+            }
+          ],
+          dynamic_template_data:{
+            nombre: `${nombres} ${lastn} ${lastnm}`,
+            link: row.url_access
+          }
+        }
+      ],
+      template_id : "d-d3fea4888287411284f13b409603d164",
+      from: {
+        email: `${ from }@uahurtado.b2g.cl`,
+        name: 'Equipo Promueve'
+      }
+    };
+
+    await fetch('https://api.sendgrid.com/v3/mail/send', {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${configEnv.SENDGRID_API_KEY}`
+      },
+      method: 'POST',
+      body: JSON.stringify(message),
+    });
+
+
+
+    Astro.cookies.delete('payload');
+  }
+
+} else {
+  return Astro.redirect('/limpiar');
+}
+
+---
+
+<Layout title="Bienvenida">
+
+  { linkEnviado &&
+    <div class="box">
+      <p>
+        ¡Revisa tu correo electrónico!
+      </p>
+      <p>
+        Hemos enviado un enlace de acceso a tu correo electrónico <b>{obfuscatedEmail}</b>. Por favor, revisa tu bandeja de entrada y haz clic en el enlace para continuar.
+      </p>
+      <p>
+        Si no ves el correo en tu bandeja de entrada, asegúrate de revisar tu carpeta de spam o correo no deseado.
+      </p>
+      <p>Si tiene alguna pregunta o necesita asistencia adicional, no dude en contactarnos.</p>
+    </div>
+  }
+
+  { !linkEnviado &&
+    <div class="box">
+      <p>        
+        Hola!
+      </p>
+      <p>
+        El RUT <b>{obj.rut}</b> proporcionado ya se encuentra registrado en nuestro sistema con el correo electrónico <b>{obfuscatedEmail}</b>. 
+        Para continuar con el proceso o verificar el estado de su postulación, por favor haga clic en el botón a continuación.
+      </p>
+
+      <div class="field mb-3">
+        <div class="control row">
+          <div class="col-12" style="text-align: center">
+            <form id="frmLink" method="POST">
+              <button id="btnSendLink" type="submit" class="btn btn-primary">Enviar link de acceso al correo electrónico</button>
+            </form>
+          </div>
+        </div>
+      </div>
+      <p>Si tiene alguna pregunta o necesita asistencia adicional, no dude en contactarnos.</p>
+      <div class="field">
+        <div class="control row">
+          <div class="col-6">
+            <p>
+              <a href="/limpiar" class="btn btn-warning">Volver al inicio</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <script>
+    const loadingDiv = document.getElementById('loading') as HTMLElement;
+    function showSpinner() { loadingDiv.style.visibility = 'visible'; }
+    //function hideSpinner() { loadingDiv.style.visibility = 'hidden'; }
+
+    if ( document.getElementById('frmLink') ) {
+      (document.getElementById("frmLink") as HTMLInputElement).addEventListener('click', function(event) {
+        event.preventDefault();
+        const frm = (document.getElementById('frmLink') as HTMLFormElement);
+        showSpinner();
+        frm.submit();
+      });
+    }
+  </script>
+</Layout>

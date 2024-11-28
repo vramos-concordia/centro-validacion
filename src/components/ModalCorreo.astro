@@ -1,0 +1,59 @@
+---
+const { obj } = Astro.props;
+---
+
+{ obj.mode === 'sendCodeCorreo' &&
+  <div class="modal fade" id="modalcorreo" data-backdrop="static" tabindex="-1" aria-labelledby="modalcorreo" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form method="POST" class="box">
+          <input type="hidden" id="mode" name="mode" value="validarCodeEmail" />
+          <div class="modal-body">
+            <div class="field">
+              <label class="label">Correo electrónico</label>
+              <div class="control has-icons-left is-expanded">
+                <input type="email" name="email" class="form-control" value={obj.email} required readonly autocomplete="off"/>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label">Código de verificación</label>
+              <div class="control has-icons-left is-expanded">
+                <input id="codeValCorreo" type="number" class="form-control" name="code" minlength="6" maxlength="6" required autofocus/>
+              </div>
+            </div>
+            <div>
+              <p class="alert alert-success">
+                Ingresa el código enviado a tu correo electrónico.
+              </p>
+            </div>
+            {obj.errorCodigo && 
+              <div>
+                <p class="alert alert-danger">
+                  Codigo no valido!
+                </p>
+              </div>
+            }
+          </div>
+          <div class="modal-footer">
+            <a href="/cancel-email" class="btn btn-danger">Cancelar</a>
+            <button type="submit" class="btn btn-primary">Validar código</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  }
+
+  <script>
+    const modalElement = document.getElementById('modalcorreo');
+    if ( modalElement !== null ){
+      const modalCorreo = new window.bootstrap.Modal(modalElement, {
+        keyboard: false,
+        backdrop: 'static'
+      });
+      (document.getElementById('modalcorreo') as HTMLElement).addEventListener('shown.bs.modal', function () {
+        (document.getElementById('codeValCorreo') as HTMLInputElement).focus();
+      })
+      modalCorreo.show();
+    }
+  </script>

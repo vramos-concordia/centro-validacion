@@ -1,0 +1,53 @@
+---
+const { obj } = Astro.props;
+---
+<div class="box">
+  <div class="field">
+    <label class="label" for="situacion_discapacidad">¿Situación de Discapacidad?</label>
+    <p>Movilidad reducida física (silla de ruedas, muletas, dificultad para subir escaleras, otros)</p>
+    <div class="control">
+      <div>
+        <select id="situacion_discapacidad" name="situacion_discapacidad" class="form-select" required>
+          <option value="">Seleccione una opción</option>
+          {obj.situacion_discapacidad === '1' ? <option value="1" selected>SÍ</option> : <option value="1">SÍ</option> }
+          {obj.situacion_discapacidad === '2' ? <option value="2" selected>NO</option> : <option value="2">NO</option> }
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div id="divNecesidadAsistencia" class="field d-none">
+    <label class="label" for="necesidad_asistencia">¿Necesidad de Asistencia?</label>
+    <div class="control">
+      <div>
+        <select id="necesidad_asistencia" name="necesidad_asistencia" class="form-select">
+          <option value="">Seleccione una opción</option>
+          {obj.necesidad_asistencia === '1' ? <option value="1" selected>SÍ</option> : <option value="1">SÍ</option> }
+          {obj.necesidad_asistencia === '2' ? <option value="2" selected>NO</option> : <option value="2">NO</option> }
+        </select>
+      </div>
+    </div>
+  </div>
+ 
+</div>
+
+<script>
+  const selectSituacionDiscapacidad = document.getElementById('situacion_discapacidad') as HTMLInputElement;
+  const divNecesidadAsistencia = document.getElementById('divNecesidadAsistencia') as HTMLInputElement;
+  const selectNecesidadAsistencia = document.getElementById('necesidad_asistencia') as HTMLInputElement;
+
+  function handlerDiscapcidad() {
+    if ( selectSituacionDiscapacidad.value === '1') {
+      divNecesidadAsistencia.classList.remove('d-none');
+      selectNecesidadAsistencia.setAttribute("required", "required");
+    } else {
+      divNecesidadAsistencia.classList.add('d-none');
+      selectNecesidadAsistencia.removeAttribute("required");
+    }
+  }
+
+  selectSituacionDiscapacidad.addEventListener('change', handlerDiscapcidad);
+
+  handlerDiscapcidad();
+
+</script>

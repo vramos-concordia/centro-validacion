@@ -1,0 +1,602 @@
+---
+import CorreoElectronico from '../components/CorreoElectronico.astro';
+import Identidad from '../components/Identidad.astro';
+import Telefono from '../components/Telefono.astro';
+import Layout from '../layouts/Layout.astro';
+
+import { AES, enc } from 'crypto-ts';
+import { getCode } from "../lib/utils";
+
+import { connect } from '@planetscale/database';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getDifference, getFullDateFromMRZ, getFullDateFromMRZMySQL } from "../lib/utils";
+
+import ModalCorreo from '../components/ModalCorreo.astro';
+import Direccion from '../components/Direccion.astro';
+import Discapacidad from '../components/Discapacidad.astro';
+import ServiciosdeCuidados from '../components/ServiciosdeCuidados.astro';
+import TerminosyCondiciones from '../components/TerminosyCondiciones.astro';
+import Nivelescolaridad from '../components/Nivelescolaridad.astro';
+import { configEnv } from '../lib/vars';
+
+
+//return Astro.redirect('/plazo-finalizado');
+
+const config = {
+  host: configEnv.DATABASE_HOST,
+  username: configEnv.DATABASE_USERNAME,
+  password: configEnv.DATABASE_PASSWORD,
+  fetch: (url: any, init: any) => {
+    delete init['cache']
+    return fetch(url, init)
+  }
+}
+
+const S3 = new S3Client({
+  region: 'auto',
+  endpoint: configEnv.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: configEnv.R2_ACCESS_KEY_ID,
+    secretAccessKey: configEnv.R2_SECRET_ACCESS_KEY,
+  },
+});
+
+let errores: string[] = [];
+
+let errorMensaje: string[] = [];
+let errorMensajeFrontal: string[] = [];
+
+let errorMsgRunError = '';
+let errorMsgSerieError = '';
+
+let cargarFrontal = false;
+let cargarPosterior = false;
+
+let imagenFrontal = null;
+let imagenPosterior = null;
+
+let fields = null;
+
+let emailYaUsado = false;
+
+let obj : {[key: string]: any} = {};
+
+
+if ( Astro.cookies.has('payload') ) {
+  //recuperar valores de la cookie
+  let encrypted = Astro.cookies.get('payload')?.value as string;
+  let decrypted = AES.decrypt(encrypted, configEnv.SECRET_KEY);
+  obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+  console.log('cookieForm.', {obj});
+
+  if ( obj.pregunta1 === '2' || 
+       obj.pregunta2 === '2' ||
+       obj.pregunta3 === '2' ||
+       obj.pregunta4 === '2' ||
+       obj.pregunta5 === '2' ||
+       obj.pregunta6 === null
+  ) {
+    return Astro.redirect('/');
+  }
+
+  if ( obj.pregunta1 === '' || 
+       obj.pregunta2 === '' ||
+       obj.pregunta3 === '' ||
+       obj.pregunta4 === '' ||
+       obj.pregunta5 === '' ||
+       obj.pregunta6 === ''
+  ) {
+    return Astro.redirect('/');
+  }
+
+
+  if ( obj.estadoFrontal !== 0 ) {
+    const keyRut = obj.rut.split('-')[0].replaceAll('.', '');
+
+    imagenFrontal = await getSignedUrl(S3, new GetObjectCommand({
+      Bucket: configEnv.R2_BUCKET, 
+      Key: `${keyRut}/frontal.jpg`
+    }), { expiresIn: 3600 });
+
+    const conn = connect(config);
+    const query = `select * from ndb_metadata where run = :run and meta_key = 'jsonText_CedulaFrontal'`;
+    const params = {
+      run: obj.rut.split('-')[0].replaceAll('.', ''),
+    }
+    const result = await conn.execute(query, params);
+    if ( result.rows.length > 0 ) {
+      const rowOcr: any = result.rows[0];
+      const jsonOcr = JSON.parse(rowOcr.meta_value);
+      //console.log(jsonOcr);
+
+      const template = [
+        'CEDULA DE',
+        'REPUBLICA DE CHILE',
+        'IDENTIDAD',
+        //'SERVICIO DE REGISTRO CIVIL E IDENTIFICACIÓN',
+        'APELLIDOS',
+        'NOMBRES',
+        //'NACIONALIDAD',
+        'SEXO',
+        //'NUMERO DOCUMENTO',
+        'FECHA DE NACIMIENTO',
+        'FECHA DE EMISION',
+        'FECHA DE VENCIMIENTO',
+        //'FIRMA DEL TITULAR',
+        `RUN ${obj.rut.toUpperCase()}`
+      ];
+
+      if ( jsonOcr.hasOwnProperty('TextDetections') ) {
+        const textDetections = jsonOcr.TextDetections;
+        let arrayFinds: any[] = [];
+        textDetections.forEach((element: any) => {
+          
+          const text = element.DetectedText.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+
+          if ( template.includes(text) ) {
+            if ( element.Confidence >= 80 ) {
+              ///console.log({DetectedText: element.DetectedText, Confidence: element.Confidence});
+              arrayFinds.push(text);
+            }
+          }
+        });
+
+        console.log(arrayFinds);
+        const diff = getDifference(template, arrayFinds);
+        console.log({diff});
+
+        if ( diff.length === 0 ) {
+
+          let indexApellidos = -1;
+          for(let i = 0; i < textDetections.length; i++ ) {
+            if (textDetections[i].DetectedText == 'APELLIDOS') {
+              indexApellidos = i;
+              break;
+            }
+          }
+
+          //console.log(textDetections[indexApellidos + 4]);
+
+          if ( textDetections[indexApellidos + 3].DetectedText === 'NOMBRES' ) {
+            let lastn = textDetections[indexApellidos + 1].DetectedText;
+            let lastnm = textDetections[indexApellidos + 2].DetectedText;
+            let names = textDetections[indexApellidos + 4].DetectedText;
+            names = textDetections[indexApellidos + 4].Type === 'LINE' ? names : `${names} ${textDetections[indexApellidos + 5].DetectedText}`;
+
+            //console.log({lastn, lastnm, names});
+
+            obj.nombres = names;
+            obj.apellido1 = lastn;
+            obj.apellido2 = lastnm;
+
+            obj.estadoFrontal = 1;
+
+          } else {
+            if ( textDetections[indexApellidos + 4].DetectedText === 'NOMBRES' ) {
+              let lastn = textDetections[indexApellidos + 2].DetectedText;
+              let lastnm = textDetections[indexApellidos + 3].DetectedText;
+              let names = textDetections[indexApellidos + 5].DetectedText;
+              names = textDetections[indexApellidos + 5].Type === 'LINE' ? names : `${names} ${textDetections[indexApellidos + 6].DetectedText}`;
+
+              //console.log({lastn, lastnm, names});
+
+              obj.nombres = names;
+              obj.apellido1 = lastn;
+              obj.apellido2 = lastnm;
+
+              obj.estadoFrontal = 1;
+
+            } else {
+              obj.estadoFrontal = 2;
+              errorMensajeFrontal.push(`No es posible obtener sus nombres y apellidos de la <strong>imagen frontal</strong>.`);
+              errorMensajeFrontal.push(`Imagen distorsionada o contiene mucho brillo.`);
+              errorMensajeFrontal.push(`Asegúrate de realizar un buen encuadre.`);
+            }
+          }
+          
+        } else {
+          obj.estadoFrontal = 2;
+          errorMensajeFrontal.push(`No es posible validar la <strong>imagen frontal</strong>.`);
+          errorMensajeFrontal.push(`Imagen distorsionada o contiene mucho brillo.`);
+          errorMensajeFrontal.push(`Asegúrate de realizar un buen encuadre.`);
+        }
+
+      } else {
+        obj.estadoFrontal = 2;
+        errorMensajeFrontal.push(`No es posible procesar la <strong>imagen frontal</strong>.`);
+        errorMensajeFrontal.push(`Imagen distorsionada o contiene mucho brillo.`);
+        errorMensajeFrontal.push(`Asegúrate de realizar un buen encuadre.`);
+      }
+      
+    } else {
+      obj.estadoFrontal = 2;
+      errorMensajeFrontal.push(`No es posible procesar la <strong>imagen frontal</strong>.`);
+      errorMensajeFrontal.push(`Imagen distorsionada o contiene mucho brillo.`);
+      errorMensajeFrontal.push(`Asegúrate de realizar un buen encuadre.`);
+    }
+  }
+
+
+  if ( obj.estadoPosterior !== 0 ) {
+    const keyRut = obj.rut.split('-')[0].replaceAll('.', '');
+      
+    imagenPosterior = await getSignedUrl(S3, new GetObjectCommand({
+      Bucket: configEnv.R2_BUCKET, 
+      Key: `${keyRut}/posterior.jpg`
+    }), { expiresIn: 3600 });
+    const conn = connect(config);
+    const query = `select * from ndb_metadata where run = :run and meta_key = 'jsonText_CedulaPosteriorMRZ'`;
+    const params = {
+      run: obj.rut.split('-')[0].replaceAll('.', ''),
+    }
+    const result = await conn.execute(query, params);
+    if ( result.rows.length > 0 ) {
+      const rowMRZ: any = result.rows[0];
+      const jsonMrz = JSON.parse(rowMRZ.meta_value);
+      //console.log(jsonMrz);
+
+      if ( jsonMrz.hasOwnProperty('error') ) {
+        obj.estadoPosterior = 2;
+        errorMensaje.push(`No es posible procesar la <strong>imagen posterior</strong>.`);
+        errorMensaje.push(`Imagen distorsionada o contiene mucho brillo.`);
+        errorMensaje.push(`Asegúrate de realizar un buen encuadre.`);
+      } else {
+        if ( jsonMrz.hasOwnProperty('parsed') ) {
+          if ( jsonMrz.parsed.valid !== true ) {
+            obj.estadoPosterior = 2;
+            errorMensaje.push(`No es posible procesar la <strong>imagen posterior</strong>.`);
+          } else {
+            fields = jsonMrz.parsed.fields;
+
+            if ( fields.issuingState !== 'CHL') {
+              obj.estadoPosterior = 2;
+              errorMensaje.push(`El documento no corresponde a una cedula Chilena.`);
+            } else {
+              //console.log({fields});
+
+              const rutEncrypted = obj.rut.replaceAll('.', '').replace('-', '');
+              //const optional1 = fields.optional1;
+              
+              const optional2 = fields.optional2.replace(' ', '');
+              const documentNumber = fields.documentNumber;
+
+              if ( optional2 !== rutEncrypted) {
+                if ( documentNumber !== rutEncrypted) {
+                  obj.estadoPosterior = 2;
+                  errorMensaje.push(`La cedula <strong>NO</strong> corresponde al RUN <strong>${obj.rut}</strong>.`);
+                } else {
+                  obj.estadoPosterior = 1;
+                }
+              } else {
+                obj.estadoPosterior = 1;
+              }
+
+              if ( documentNumber !== obj.numeroSerie) {
+                if ( optional2 !== obj.numeroSerie) {
+                  obj.estadoPosterior = 2;
+                  errorMensaje.push(`La cedula <strong>NO</strong> corresponde al número de documento <strong>${obj.numeroSerie}</strong>.`);
+                } else {
+                  obj.estadoPosterior = 1;
+                }
+              } else {
+                obj.estadoPosterior = 1;
+              }
+
+              if ( obj.estadoPosterior === 1 ) {
+                obj.nacionalidad = fields.nationality;
+                obj.fecha_nacimiento = getFullDateFromMRZ(fields.birthDate).format;
+                obj.fecha_nacimiento_MYSQL = getFullDateFromMRZMySQL(fields.birthDate).format;
+                obj.sex = fields.sex;
+              }
+            }
+          }
+        } else {
+          obj.estadoPosterior = 2;
+          errorMensaje.push(`No es posible procesar la <strong>imagen posterior</strong>.`);
+        }
+      }
+    } else {
+      obj.estadoPosterior = 2;
+      errorMensaje.push(`No es posible procesar la <strong>imagen posterior</strong>.`);
+      errorMensaje.push(`Imagen distorsionada o contiene mucho brillo.`);
+      errorMensaje.push(`Asegúrate de realizar un buen encuadre.`);
+    }
+  }
+
+
+  encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+  Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+  
+
+} else {
+  return Astro.redirect('/');
+}
+
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  console.log(data);
+
+  obj.mode = data.get('mode') as string;
+
+  //actions.
+
+  if ( obj.mode === 'validarCodeEmail' ) {
+    const code = data.get("code") as string;
+    if ( code === obj.codigoVerificacionEmail) {
+      obj.mode = '';
+      obj.estadoEmail = true;
+    } else {
+      obj.errorCodigo = true;
+      obj.mode = 'sendCodeCorreo';
+    }
+  } else {
+    obj.rut = data.get('rut') as string;
+    obj.numeroSerie = data.get('numero_documento') as string;
+    obj.email = data.get('email') as string;
+    obj.telefono1 = data.get('telefono1') as string;
+    obj.telefono2 = data.get('telefono2') as string;
+    /*obj.nombres = data.get('nombres');
+    obj.apellido1 = data.get('apellido1');
+    obj.apellido2 = data.get('apellido2');
+    obj.fecha_nacimiento = data.get('fecha_nacimiento');
+    obj.nacionalidad = data.get('nacionalidad');*/
+    obj.estadocivil = data.get('estadocivil');
+    obj.nivel_escolaridad = data.get('nivel_escolaridad');
+    obj.comuna = data.get('comuna');
+    obj.direccion = data.get('direccion');
+    obj.declaraciondireccion = data.get('declaraciondireccion');
+    obj.situacion_discapacidad = data.get('situacion_discapacidad');
+    obj.necesidad_asistencia = data.get('necesidad_asistencia');
+    obj.menor6 = data.get('menor6');
+    obj.cuantos_menor6 = data.get('cuantos_menor6');
+    /*obj.banco = data.get('banco');
+    obj.tipocuenta = data.get('tipocuenta');
+    obj.numero_cuenta = data.get('numero_cuenta');*/
+    obj.situacion_discapacidad_mayor6 = data.get('situacion_discapacidad_mayor6');
+    obj.cuantos_discapacidad = data.get('cuantos_discapacidad');
+    obj.aceptoTerminosYCondiciones = data.get('aceptoTerminosYCondiciones');
+
+    if ( obj.mode === 'sendCodeCorreo' ) {
+      console.log('verificar que no exista en la base de datos....');
+      
+
+      const conn = connect(config);
+      const query = `select * from ndb_postulant where email = :email`;
+      const params = {
+        email: obj.email
+      }
+      const result = await conn.execute(query, params);
+      if ( result.rows.length > 0 ) {
+        obj.mode = '';
+        emailYaUsado = true;
+
+
+        errores.push(`El correo electrónico <b>${obj.email}</b> ya cuenta con una inscripción, por favor ingrese su correo personal.`)
+
+      } else {
+        obj.codigoVerificacionEmail = getCode(6);
+        obj.estadoEmail = false;
+
+        /*let nombres = obj.nombres.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+        let ap1 = obj.apellido1.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+        let ap2 = obj.apellido2.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());*/
+
+        const from = 'no-responder'; //Math.random().toString(36).substring(2,10);
+        const message = {
+          personalizations: [
+            {
+              to: [
+                {
+                  email: obj.email,
+                  //name: 'Janice Doe'
+                }
+              ],
+              dynamic_template_data:{
+                codigo: obj.codigoVerificacionEmail,
+                //nombre: `${nombres} ${ap1} ${ap2}`
+              }
+            }
+          ],
+          template_id : "d-291feabd6bfe42ce9e97bcba7dc0e603",
+          from: {
+            email: `${ from }@uahurtado.b2g.cl`,
+            name: 'Verificación de correo'
+          }
+        };
+
+        await fetch('https://api.sendgrid.com/v3/mail/send', {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${configEnv.SENDGRID_API_KEY}`
+          },
+          method: 'POST',
+          body: JSON.stringify(message),
+        });
+      }
+    } else if ( obj.mode === 'captureFrontal') {
+      let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+      Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+
+      return Astro.redirect('/cedula-frontal');
+    } else if ( obj.mode === 'capturePosterior') {
+
+      let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+      Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+
+      return Astro.redirect('/cedula-posterior');
+    } else if ( obj.mode === 'savePostulacion') {
+
+      console.log(obj);
+
+      if ( obj.numeroSerie === null || obj.numeroSerie === '' ) {
+        errores.push('Número de documento');
+      }
+
+      if ( obj.estadoFrontal === 0 ) {
+        errores.push('Cargue imagen de tu cédula de identidad <b>Frontal</b>');
+      }
+
+      if ( obj.estadoPosterior === 0 ) {
+        errores.push('Cargue imagen de tu cédula de identidad <b>Posterior</b>');
+      }
+
+      if ( obj.estadocivil === null || obj.estadocivil === '' ) {
+        errores.push('Estado Civil');
+      }
+
+      if ( obj.email === null || obj.email === '' ) {
+        errores.push('Correo electrónico');
+      }
+
+      if ( obj.estadoEmail === false ) {
+        errores.push('Correo electrónico - No verificado');
+      }
+
+      if ( obj.telefono1 === null || obj.telefono1 === '' ) {
+        errores.push('Teléfono');
+      }
+
+      if ( obj.telefono2 === null || obj.telefono2 === '' ) {
+        errores.push('Teléfono');
+      }
+
+      if ( obj.telefono1 !== obj.telefono2) {
+        errores.push('Los números de teléfono ingresados no son iguales.');
+      }
+
+      if ( obj.nivel_escolaridad === null || obj.nivel_escolaridad === '' ) {
+        errores.push('Nivel de escolaridad');
+      }
+
+      if ( obj.comuna === null || obj.comuna === '' ) {
+        errores.push('Comuna');
+      }
+
+      if ( obj.direccion === null || obj.direccion === '' ) {
+        errores.push('Dirección');
+      }
+
+      if ( obj.declaraciondireccion === null || obj.declaraciondireccion === '' ) {
+        errores.push('Debe declarar que la información de su dirección entregada es fidedigna.');
+      }
+
+      if ( obj.situacion_discapacidad === null || obj.situacion_discapacidad === '' ) {
+        errores.push('Situación de Discapacidad');
+      }
+      
+      if ( obj.situacion_discapacidad === '1' ) {
+        if ( obj.necesidad_asistencia === null || obj.necesidad_asistencia === '' ) {
+          errores.push('Necesidad de Asistencia');
+        }
+      }
+      
+      if ( obj.menor6 === null || obj.menor6 === '' ) {
+        errores.push('Tiene hijas/os menores de 5 años 11 meses');
+      }
+
+      if ( obj.menor6 === '1' ) {
+        if ( obj.cuantos_menor6 === null || obj.cuantos_menor6 === '' ) {
+          errores.push('Cuántos hijas/os menores de 5 años 11 meses');
+        }
+      }
+
+
+      if ( obj.situacion_discapacidad_mayor6 === null || obj.situacion_discapacidad_mayor6 === '' ) {
+        errores.push('Tiene hijas/os entre 6 a 18 años en situación de discapacidad');
+      }
+
+      if ( obj.situacion_discapacidad_mayor6 === '1' ) {
+        if ( obj.cuantos_discapacidad === null || obj.cuantos_discapacidad === '' ) {
+          errores.push('Cuántos hijas/os entre 6 a 18 años en situación de discapacidad');
+        }
+      }
+
+      if ( obj.aceptoTerminosYCondiciones === null || obj.aceptoTerminosYCondiciones === '' ) {
+        errores.push('Debe aceptar los terminos y condiciones.');
+      }
+
+      if ( errores.length === 0 ) {
+        obj.finalizado = true;
+
+        let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+        Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+
+        return Astro.redirect('/confirmacion');
+      } else {
+        obj.finalizado = false;
+      }
+    }
+  }
+
+  let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+  Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+
+}
+---
+
+<Layout title="UAH.">
+  <ModalCorreo obj={obj}></ModalCorreo>
+
+	<form id="frm" method="POST" class="box">
+
+    {errores.length > 0 && 
+      
+      <div class="alert alert-danger" role="alert">
+        <strong>Corrija los siguientes errores: </strong>
+        <ul class="m-1">
+          {errores.map((item: any) => (
+            <li><Fragment set:html={item} /></li>
+          ))}
+        </ul>
+      </div>
+    }
+
+    <input type="hidden" id="mode" name="mode" value="savePostulacion" />
+    <Identidad obj={obj} 
+               errorMsgRunError={errorMsgRunError} 
+               errorMsgSerieError={errorMsgSerieError}
+               errorMensajeFrontal={errorMensajeFrontal}
+               imagenFrontal={imagenFrontal}
+               errorMensaje={errorMensaje}
+               imagenPosterior={imagenPosterior}
+               cargarFrontal={cargarFrontal}
+               cargarPosterior={cargarPosterior}
+               ></Identidad>
+    <CorreoElectronico obj={obj} emailYaUsado={emailYaUsado}></CorreoElectronico>
+    <Telefono obj={obj}></Telefono>
+    <Nivelescolaridad obj={obj}></Nivelescolaridad>
+    <Direccion obj={obj}></Direccion>
+    <Discapacidad obj={obj}></Discapacidad>
+    <ServiciosdeCuidados obj={obj}></ServiciosdeCuidados>
+    <TerminosyCondiciones obj={obj}></TerminosyCondiciones>
+
+    <div class="field">
+      <div class="control row">
+        <div class="col-6">
+          <p>
+            <a href="/" class="btn btn-warning">&raquo; Volver</a>
+          </p>
+        </div>
+        <div class="col-6" style="text-align: right">
+          <button id="btnSubmitInscripcion" type="submit" class="btn btn-primary">&raquo; Siguiente</button>
+        </div>
+      </div>
+    </div>
+  </form>
+  <script>
+
+    if ( document.getElementById('btnSubmitInscripcion') ) {
+
+      (document.getElementById("btnSubmitInscripcion") as HTMLInputElement).addEventListener('click', function(event) {
+        event.preventDefault();
+        const frm = (document.getElementById('frm') as HTMLFormElement);
+        frm.reportValidity();
+        frm.classList.add('was-validated')
+        if (frm.checkValidity() === true ) {
+          frm.submit();
+        }
+      });
+    }
+  </script>
+</Layout>

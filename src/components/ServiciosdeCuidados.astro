@@ -1,0 +1,148 @@
+---
+const { obj } = Astro.props;
+
+const bancos = [
+  'BANCOESTADO', 
+  'BANCO DE CHILE', 
+  'BANCO INTERNACIONAL', 
+  'SCOTIABANK-DESARROLLO', 
+  'BCI/MACH', 
+  'CORP-BANCA', 
+  'BICE', 
+  'HSBC BANK', 
+  'BANCO SANTANDER', 
+  'BANCO ITAU', 
+  'MUFG BANK, LTD.', 
+  'BANCO SECURITY', 
+  'BANCO FALABELLA', 
+  'BANCO RIPLEY/CHEK', 
+  'BANCO CONSORCIO', 
+  'BANCO BBVA', 
+  'COOPEUCH/DALE', 
+  'LA POLAR PREPAGO', 
+  'PREPAGO LOS HEROES', 
+  'PREPAGO TENPO', 
+  'TAPP CAJA LOS ANDES', 
+  'GLOBAL66', 
+  'COPEC PAY', 
+  'MERCADO PAGO'
+];
+---
+
+<div id="divMenor6" class="box">
+  <div class="field">
+    <label class="label" for="menor6">¿Tiene hijas/os menores de 5 años 11 meses?</label>
+    <div class="control">
+      <div>
+        <select id="menor6" name="menor6" class="form-select" required>
+          <option value="">Seleccione una opción</option>
+          {obj.menor6 === '1' ? <option value="1" selected>SÍ</option> : <option value="1">SÍ</option> }
+          {obj.menor6 === '2' ? <option value="2" selected>NO</option> : <option value="2">NO</option> }
+        </select>
+      </div>
+    </div>
+  </div>
+  
+  <div id="divCuantosMenor6" class="field mb-3 d-none">
+    <label class="label" for="cuantos_menor6">¿Cuántos?</label>
+    <div class="control">
+      <div>
+        <select id="cuantos_menor6" name="cuantos_menor6" class="form-select">
+          <option value="">Seleccione una opción</option>
+          {obj.cuantos_menor6 === '1' ? <option value="1" selected>1</option> : <option value="1">1</option>}
+          {obj.cuantos_menor6 === '2' ? <option value="2" selected>2</option> : <option value="2">2</option>}
+          {obj.cuantos_menor6 === '3' ? <option value="3" selected>3</option> : <option value="3">3</option>}
+          {obj.cuantos_menor6 === '4' ? <option value="4" selected>4</option> : <option value="4">4</option>}
+          {obj.cuantos_menor6 === '5' ? <option value="5" selected>5</option> : <option value="5">5</option>}
+          {obj.cuantos_menor6 === '6' ? <option value="6" selected>6</option> : <option value="6">6</option>}
+          {obj.cuantos_menor6 === '7' ? <option value="7" selected>7</option> : <option value="7">7</option>}
+          {obj.cuantos_menor6 === '8' ? <option value="8" selected>8</option> : <option value="8">8</option>}
+          {obj.cuantos_menor6 === '9' ? <option value="9" selected>9</option> : <option value="9">9</option>}
+          {obj.cuantos_menor6 === '10' ? <option value="10" selected>10</option> : <option value="10">10</option>}
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<div id="divSituacionDiscapacidadHijos" class="box">
+  <div class="field">
+    <label class="label" for="situacion_discapacidad_mayor6">¿Tiene hijas/os entre 6 a 18 años en situación de discapacidad?</label>
+    <div class="control">
+      <div>
+        <select id="situacion_discapacidad_mayor6" name="situacion_discapacidad_mayor6" class="form-select" required>
+          <option value="">Seleccione una opción</option>
+          {obj.situacion_discapacidad_mayor6 === '1' ? <option value="1" selected>SÍ</option> : <option value="1">SÍ</option> }
+          {obj.situacion_discapacidad_mayor6 === '2' ? <option value="2" selected>NO</option> : <option value="2">NO</option> }
+        </select>
+      </div>
+    </div>
+  </div>
+  
+  <div id="divCuantosMayor6" class="field d-none">
+    <label class="label" for="cuantos_discapacidad">¿Cuántos?</label>
+    <div class="control">
+      <div>
+        <select id="cuantos_discapacidad" name="cuantos_discapacidad" class="form-select">
+          <option value="">Seleccione una opción</option>
+          {obj.cuantos_discapacidad === '1' ? <option value="1" selected>1</option> : <option value="1">1</option>}
+          {obj.cuantos_discapacidad === '2' ? <option value="2" selected>2</option> : <option value="2">2</option>}
+          {obj.cuantos_discapacidad === '3' ? <option value="3" selected>3</option> : <option value="3">3</option>}
+          {obj.cuantos_discapacidad === '4' ? <option value="4" selected>4</option> : <option value="4">4</option>}
+          {obj.cuantos_discapacidad === '5' ? <option value="5" selected>5</option> : <option value="5">5</option>}
+          {obj.cuantos_discapacidad === '6' ? <option value="6" selected>6</option> : <option value="6">6</option>}
+          {obj.cuantos_discapacidad === '7' ? <option value="7" selected>7</option> : <option value="7">7</option>}
+          {obj.cuantos_discapacidad === '8' ? <option value="8" selected>8</option> : <option value="8">8</option>}
+          {obj.cuantos_discapacidad === '9' ? <option value="9" selected>9</option> : <option value="9">9</option>}
+          {obj.cuantos_discapacidad === '10' ? <option value="10" selected>10</option> : <option value="10">10</option>}
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const selectMenor6 = document.getElementById('menor6') as HTMLInputElement;
+    const divCuantosMenor6 = document.getElementById('divCuantosMenor6') as HTMLElement;
+    const inputCuentosMenor6 = document.getElementById('cuantos_menor6') as HTMLInputElement;
+
+    const selectSituacionDiscapacidadMayor6 = document.getElementById('situacion_discapacidad_mayor6') as HTMLInputElement;
+    const divCuantosMayor6 = document.getElementById('divCuantosMayor6') as HTMLElement;
+    const inputCuentosMayor6 = document.getElementById('cuantos_discapacidad') as HTMLInputElement;
+
+    function handleMenor() {
+      if ( selectMenor6.value === '1') {
+        divCuantosMenor6.classList.remove('d-none');
+        inputCuentosMenor6.setAttribute("required", "required");
+      } else {
+        divCuantosMenor6.classList.add('d-none');
+        inputCuentosMenor6.removeAttribute("required");
+        inputCuentosMenor6.value = '';
+      }
+    }
+
+    selectMenor6.addEventListener('change', handleMenor);
+    
+
+    function handleMayor() {
+      if ( selectSituacionDiscapacidadMayor6.value === '1') {
+        divCuantosMayor6.classList.remove('d-none');
+        inputCuentosMayor6.setAttribute("required", "required");
+      } else {
+        divCuantosMayor6.classList.add('d-none');
+        inputCuentosMayor6.removeAttribute("required");
+        inputCuentosMayor6.value = '';
+      }
+    }
+
+    selectSituacionDiscapacidadMayor6.addEventListener('change', handleMayor);
+
+
+    handleMenor();
+    handleMayor();
+  });
+
+</script>

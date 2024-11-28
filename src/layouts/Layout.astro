@@ -1,0 +1,67 @@
+---
+interface Props {
+	title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="es">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="description" content="Astro description" />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" href="/static/favicon.ico" />
+		<meta name="generator" content={Astro.generator} />
+		<title>{title}</title>
+    <link href="/static/assets/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="/static/assets/css/style.css?v=2" rel="stylesheet" />
+    <link href="/static/assets/css/loading.css" rel="stylesheet" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap" rel="stylesheet">
+	</head>
+	<body>
+    <div id="loading" class="loading">
+      Loading&#8230;     
+    </div>
+    <section>
+      <div class="container">
+        <div class="panelPreinscripcion">
+          <!--Logos-->
+          <div class="section box-round">
+            <div class="row" style="text-align: center;">
+              <div class="col-2">
+              </div>
+              <div class="col-8">
+                  <img src="/static/assets/img/logo_gs_hor_color.png" alt="" width="100%">
+              </div>
+              <div class="col-2" style="margin-bottom: 3%;">
+              </div>
+            </div>
+          </div>
+          <!--fin Logos-->
+          <slot />
+          <!--footer-->
+          <div class="section box-round">
+            <div class="row">
+              <div class="col-12" style="padding: 20px;">
+                <img src="/static/assets/img/logos_footer.png" alt="" width="100%">
+              </div>
+            </div>
+          </div>
+          <!--fin footer-->
+        </div>
+      </div>
+    </section>
+    <script is:inline src="/static/assets/js/bootstrap.bundle.min.js"></script>
+    <script is:inline type="text/javascript">
+      function disableBack() { window.history.forward(); }
+      setTimeout("disableBack()", 0);
+      window.onload = disableBack;
+      window.onpageshow = function(evt) { if (evt.persisted) disableBack() }
+      window.onload = function() {void(0)}
+    </script>
+	</body>
+</html>

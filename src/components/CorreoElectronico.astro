@@ -1,0 +1,126 @@
+---
+const { obj, emailYaUsado } = Astro.props;
+---
+
+{
+  obj.estadoEmail === false && (
+    <div class="box">
+      <div class="field">
+        <label class="label" for="email">
+          Correo electrónico
+        </label>
+
+        <div class="input-group flex-nowrap">
+          <span class="input-group-text" id="addon-wrapping">
+            <img src="/static/assets/img/envelope.svg" alt="" />
+          </span>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            class="form-control"
+            placeholder="tucorreo@dominio.com"
+            value={obj.email}
+            required
+            autocomplete="off"
+          />
+        </div>
+      </div>
+
+      <div>
+        <div class="bd-example-snippet bd-code-snippet">
+          <div class="bd-example m-0 border-0">
+            <div class="d-flex justify-content-between flex-wrap">
+              <button
+                type="button"
+                class="btn btn-primary"
+                id="btnCodeCorreo"
+                style="margin-top: 10px;"
+              >
+                <span class="icon is-small">
+                  <img
+                    src="/static/assets/img/key.svg"
+                    class="icon_white"
+                    alt=""
+                  />
+                </span>
+                <span>Click para obtener código de verificación de correo</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {emailYaUsado && (
+        <div>
+          <p class="alert alert-danger">
+            El correo electrónico <b>{obj.email}</b> ya cuenta con una
+            inscripción, por favor ingrese su correo personal.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+{
+  obj.estadoEmail === true && (
+    <div class="box">
+      <div class="field">
+        <label class="label" for="email">
+          Correo electrónico
+        </label>
+        <div class="input-group flex-nowrap">
+          <span class="input-group-text" id="addon-wrapping">
+            <img src="/static/assets/img/envelope.svg" alt="" />
+          </span>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            class="form-control is-valid"
+            placeholder="tucorreo@dominio.com"
+            value={obj.email}
+            required
+            readonly
+            autocomplete="off"
+          />
+        </div>
+      </div>
+      <div>
+        <p class="alert alert-success">
+          <img
+            src="/static/assets/img/check-circle.svg"
+            class="icon_green"
+            alt=""
+          />{" "}
+          Correo verificado
+        </p>
+      </div>
+    </div>
+  )
+}
+
+<script>
+  const loadingDiv = document.getElementById("loading") as HTMLElement;
+  function showSpinner() {
+    loadingDiv.style.visibility = "visible";
+  }
+  //function hideSpinner() { loadingDiv.style.visibility = 'hidden'; }
+
+  if (document.getElementById("btnCodeCorreo")) {
+    (
+      document.getElementById("btnCodeCorreo") as HTMLButtonElement
+    ).addEventListener("click", function () {
+      const email = document.getElementById("email") as HTMLInputElement;
+      if (email.value.length > 0) {
+        showSpinner();
+        (document.getElementById("mode") as HTMLInputElement).value =
+          "sendCodeCorreo";
+        (document.getElementById("frm") as HTMLFormElement).submit();
+      } else {
+        email.focus();
+      }
+    });
+  }
+</script>

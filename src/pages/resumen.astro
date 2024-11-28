@@ -1,0 +1,109 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { configEnv } from '../lib/vars';
+import { AES, enc } from 'crypto-ts';
+import { connect } from '@planetscale/database';
+
+const config = {
+  host: configEnv.DATABASE_HOST,
+  username: configEnv.DATABASE_USERNAME,
+  password: configEnv.DATABASE_PASSWORD,
+  fetch: (url: any, init: any) => {
+    delete init['cache']
+    return fetch(url, init)
+  }
+}
+
+//return Astro.redirect('/plazo-finalizado');
+
+let obj : {[key: string]: any} = {};
+let row : {[key: string]: any} = {};
+let nombres = '';
+
+if ( Astro.cookies.has('token') ) {
+  let token = Astro.cookies.get('token')?.value as string;
+  let decodeBase64Token = atob(token);
+  let decrypted = AES.decrypt(decodeBase64Token, configEnv.SECRET_KEY);
+  obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+  console.log('cookie-resumen', {obj});
+
+  const conn = connect(config);
+  
+  const query = `select * from ndb_postulant where run = :run`;
+  const params = {
+    run: obj.rut.split('-')[0].replaceAll('.', ''),
+  }
+  const result = await conn.execute(query, params);
+  if ( result.rows.length > 0 ) {
+    row = result.rows[0];
+    if ( row.id_room === null ) {
+      return Astro.redirect('/sala');
+    }
+    //console.log(row);
+    //enviar correo y borrar cookie
+    let nombres = row.names.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+    let lastn = row.lastn.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+    let lastnm = row.lastnm.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+
+    const from = 'no-responder'; //Math.random().toString(36).substring(2,10);
+    const message = {
+      personalizations: [
+        {
+          to: [
+            {
+              email: row.email,
+              //name: 'Janice Doe'
+            }
+          ],
+          dynamic_template_data:{
+            nombre: `${nombres} ${lastn} ${lastnm}`,
+            link: row.url_access
+          }
+        }
+      ],
+      template_id : "d-80a49176db4b495c8dfb0047a359aaec",
+      from: {
+        email: `${ from }@uahurtado.b2g.cl`,
+        name: 'Equipo Promueve'
+      }
+    };
+
+    await fetch('https://api.sendgrid.com/v3/mail/send', {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${configEnv.SENDGRID_API_KEY}`
+      },
+      method: 'POST',
+      body: JSON.stringify(message),
+    });
+
+    Astro.cookies.delete('token');
+    Astro.cookies.delete('payload');
+
+  } else {
+    Astro.cookies.delete('token');
+    Astro.cookies.delete('payload');
+    return Astro.redirect('/');
+  }
+} else {
+  return Astro.redirect('/');
+}
+
+---
+<Layout title="Resumen Postulación">
+  <div class="box">
+    <div class="field">
+      <p>
+        ¡Felicitaciones! Usted ha sido matriculada en el Diplomado en Competencias Digitales para el Empleo de Promueve, 
+        programa del Gobierno de Santiago, aprobado por el Consejo Regional Metropolitano y ejecutado por la Universidad Alberto Hurtado. 
+        Próximamente, le llegará a su correo la siguiente información:
+      </p>
+      <p>
+        <ul>
+          <li>Fechas y horarios de sus clases.</li>
+          <li>Usuario y contraseña de acceso a nuestra aula virtual a través del correo de "info@aulapromueve.cl"</li>
+        </ul>
+      </p>
+    </div>
+  </div>
+</Layout>

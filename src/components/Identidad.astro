@@ -1,0 +1,288 @@
+---
+const { obj, errorMsgRunError, errorMsgSerieError, 
+        errorMensajeFrontal, imagenFrontal, errorMensaje,
+        imagenPosterior, cargarFrontal, cargarPosterior } = Astro.props;
+---
+<div class="box">
+  <div class="field">
+    <label class="label" for="rut">RUN</label>
+
+    <div class="input-group flex-nowrap">
+      <span class="input-group-text" id="addon-wrapping"><img src="/static/assets/img/person.svg" alt=""/></span>
+
+      <input type="text" id="rut" name="rut" class="form-control is-valid" placeholder="Ej. 11111111-1" value={obj.rut} required readonly/>
+    </div>
+
+    <div id="txtRunNoValido" class="alert alert-danger d-none">RUN no válido</div>
+    {errorMsgRunError && 
+      <p class="alert alert-danger"><Fragment set:html={errorMsgRunError} /></p>
+    }
+
+    <div class="field">
+      <label class="label" for="numeroDocumento">Número de documento
+        <a href="#" data-bs-toggle="modal" data-bs-target="#modalndoc">
+          <img src="/static/assets/img/info.svg" alt="">
+        </a>
+      </label>
+      <div class="input-group flex-nowrap">
+        <span class="input-group-text" id="addon-wrapping"><img src="/static/assets/img/note.svg" alt=""/></span>
+        {obj.estadoPosterior === 0 &&
+          <input type="text" id="numeroDocumento" name="numero_documento" minlength="9" class="form-control" placeholder="Ej. 100000001"value={obj.numeroSerie} required />
+        }
+
+        {obj.estadoPosterior === 1 &&
+          <input type="text" id="numeroDocumento" name="numero_documento" minlength="9" class="form-control is-valid" placeholder="Ej. 100000001"value={obj.numeroSerie} required readonly/>
+        }
+
+        {obj.estadoPosterior === 2 &&
+          <input type="text" id="numeroDocumento" name="numero_documento" minlength="9" class="form-control" placeholder="Ej. 100000001"value={obj.numeroSerie} required />
+        }
+      </div>
+    </div>
+    {errorMsgSerieError && 
+      <p class="alert alert-danger"><Fragment set:html={errorMsgSerieError} /></p>
+    }
+
+    <div class="field">
+      <span class="label">Captura la imagen de tu cédula de identidad:</span>
+    </div>
+    
+    <div class="field">
+      <p style="font-size: 14px; color: gray"class="alert alert-secondary">
+      La fotografía debe <b>ser clara, sin flash y dentro de los márgenes.</b>  <br />
+      Asegúrate de que <b>tu cédula esté limpia y libre de manchas.</b>   <br />
+      Comprueba si tienes <b>suficiente espacio disponible en tu dispositivo</b> antes de tomar la fotografía.<br/>
+      Si tienes alguna pregunta o inquietud acerca del proceso de postulación, no dudes en contactarnos a
+  través de nuestro call center +56 22 582 8796.
+      </p>
+    </div>
+
+    <div class="field">
+      <div class="buttons">
+
+        {obj.estadoFrontal === 0 &&
+          <button type="button" class="btn btn-primary" id="btnCaptureFrontal" style="margin-right: 0.5rem">
+            <span class="icon is-small">
+              <img src="/static/assets/img/id-badge.svg" class="icon_white" alt="" /></span>
+              <span>Cédula Frontal</span>
+          </button>
+        }
+
+        {obj.estadoFrontal === 1 &&
+          <button type="button" class="btn btn-success" id="btnCaptureFrontal" style="margin-right: 0.5rem">
+            <span class="icon is-small"><img src="/static/assets/img/check-circle.svg" class="icon_white" alt="" /></span>
+            <span>Cédula Frontal</span>
+          </button>
+        }
+
+        {obj.estadoFrontal === 2 &&
+          <button type="button" class="btn btn-danger" id="btnCaptureFrontal" style="margin-right: 0.5rem">
+            <span class="icon is-small"><img src="/static/assets/img/x-circle.svg" class="icon_white" alt="" /></span>
+            <span>Cédula Frontal</span>
+          </button>
+        }
+
+        {obj.estadoPosterior === 0 &&
+          <button type="button" class="btn btn-primary" id="btnCapturePosterior" style="margin-right: 0.5rem">
+            <span class="icon is-small"><img src="/static/assets/img/id-badge.svg" class="icon_white" alt="" /></span>
+            <span>Cédula Posterior</span>
+          </button>
+        }
+
+        {obj.estadoPosterior === 1 &&
+         <button type="button" class="btn btn-success" id="btnCapturePosterior" style="margin-right: 0.5rem">
+            <span class="icon is-small"><img src="/static/assets/img/check-circle.svg" class="icon_white" alt="" /></span>
+            <span>Cédula Posterior</span>
+          </button>
+        }
+
+        {obj.estadoPosterior === 2 &&
+         <button type="button" class="btn btn-danger" id="btnCapturePosterior" style="margin-right: 0.5rem">
+            <span class="icon is-small"><img src="/static/assets/img/x-circle.svg" class="icon_white" alt="" /></span>
+            <span>Cédula Posterior</span>
+          </button>
+        }        
+      </div>
+    </div>
+    <div class="field">
+      {obj.estadoFrontal === 2 &&
+        <div class="alert alert-danger" role="alert">
+          <ul>
+            {errorMensajeFrontal.map((item: any) => (
+              <li><Fragment set:html={item} /></li>
+            ))}
+          </ul>
+        </div>
+
+        <img id="previewBack" class="img-fluid" src={imagenFrontal}/>
+      }
+
+      {obj.estadoPosterior === 2 &&
+        <div class="alert alert-danger" role="alert">
+          <ul>
+            {errorMensaje.map((item: any) => (
+              <li><Fragment set:html={item} /></li>
+            ))}
+          </ul>
+        </div>
+
+        <img id="previewBack" class="img-fluid" src={imagenPosterior}/>
+      }
+
+      {cargarFrontal && 
+        <div>
+          <p class="alert alert-danger">
+            Para continuar el proceso, debes capturar las fotografías de tu cédula de identidad por ambos lados (foto frontal y posterior).
+          </p>
+        </div>
+      }
+
+      {cargarPosterior && 
+        <div>
+          <p class="alert alert-danger">
+            Para continuar el proceso, debes capturar las fotografías de tu cédula de identidad por ambos lados (foto frontal y posterior).
+          </p>
+        </div>
+      }
+    </div>
+  </div>
+</div>
+
+<div class="box" style="background-color: #EBF5FB;">
+  <div class="field">
+    <label class="label" for="nombres">Nombres</label>
+    <div class="input-group flex-nowrap">
+      <span class="input-group-text" id="addon-wrapping"><img src="/static/assets/img/person.svg" alt=""/></span>
+      <input type="text" id="nombres" name="nombres" class="form-control" placeholder="" value={obj.nombres}  required readonly autocomplete="off"/>
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="label" for="apellido1">Primer Apellido</label>
+    <div class="input-group flex-nowrap">
+      <span class="input-group-text" id="addon-wrapping"><img src="/static/assets/img/person.svg" alt=""/></span>
+      <input type="text" id="apellido1" name="apellido1" class="form-control" placeholder="" value={obj.apellido1}  required readonly autocomplete="off"/>
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="label" for="apellido2">Segundo Apellido</label>
+    <div class="input-group flex-nowrap">
+      <span class="input-group-text" id="addon-wrapping"><img src="/static/assets/img/person.svg" alt=""/></span>
+      <input type="text" id="apellido2" name="apellido2" class="form-control" placeholder="" value={obj.apellido2}  required readonly autocomplete="off"/>
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="label" for="fecha_nacimiento">Fecha de Nacimiento</label>
+    <div class="input-group flex-nowrap">
+      <span class="input-group-text" id="addon-wrapping"><img src="/static/assets/img/note.svg" alt=""/></span>
+      <input type="text" id="fecha_nacimiento" name="fecha_nacimiento" class="form-control" placeholder="" value={obj.fecha_nacimiento}  required readonly autocomplete="off"/>
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="label" for="nacionalidad">Nacionalidad</label>
+    <div class="input-group flex-nowrap">
+      <span class="input-group-text" id="addon-wrapping"><img src="/static/assets/img/note.svg" alt=""/></span>
+      <input type="text" id="nacionalidad" name="nacionalidad" class="form-control" placeholder="" value={obj.nacionalidad}  required readonly autocomplete="off"/>
+    </div>
+  </div>
+</div>
+
+<div class="box">
+  <div class="field">
+    <label class="label" for="estadocivil">¿Estado Civil?</label>
+    <div class="control">
+      <div>
+        <select id="estadocivil" name="estadocivil" class="form-select" required>
+          <option value="">Seleccione una opción</option>
+          {obj.estadocivil === '1' ? <option value="1" selected>Soltera</option> : <option value="1">Soltera</option>}
+          {obj.estadocivil === '2' ? <option value="2" selected>Casada</option> : <option value="2">Casada</option>}
+          {obj.estadocivil === '3' ? <option value="3" selected>Divorciada</option> : <option value="3">Divorciada</option>}
+          {obj.estadocivil === '4' ? <option value="4" selected>Viuda</option> : <option value="4">Viuda</option>}
+          {obj.estadocivil === '5' ? <option value="5" selected>Separada</option> : <option value="5">Separada</option>}
+          {obj.estadocivil === '6' ? <option value="6" selected>Conviviente</option> : <option value="6">Conviviente</option>}
+        </select>
+        <div class="invalid-feedback">
+          Seleccione su estado civil
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import {  validate, format } from 'rut.js';
+  
+
+  const loadingDiv = document.getElementById('loading') as HTMLElement;
+
+  
+  function showSpinner() { loadingDiv.style.visibility = 'visible'; }
+  //function hideSpinner() { loadingDiv.style.visibility = 'hidden'; }
+
+  document.addEventListener('DOMContentLoaded', () => {
+
+    const inputRut = document.getElementById('rut') as HTMLInputElement;
+    const btnFrontal = document.getElementById('btnCaptureFrontal') as HTMLElement;
+    const btnPosterior = document.getElementById('btnCapturePosterior') as HTMLElement;
+
+    if ( inputRut !== null ) {
+      inputRut.addEventListener('keyup', function() {
+        if ( inputRut.value.length > 2 ) {
+          let rutFormateado = format(inputRut.value);
+          inputRut.value = rutFormateado;
+        }
+      });
+
+      inputRut.addEventListener('blur', function() {
+        if ( inputRut.value.length > 0 ) {
+          if ( validate(inputRut.value) === false ) {
+            document.getElementById('txtRunNoValido')?.classList.remove("d-none");
+            inputRut.focus();
+          } else {
+            //revisar si existe....
+            showSpinner();
+            (document.getElementById('mode') as HTMLInputElement).value = 'verificarRun';
+            (document.getElementById('frm') as HTMLFormElement).submit();
+          }
+        }
+      });
+    }
+
+    if ( btnFrontal !== null ){
+      btnFrontal.addEventListener('click', () => {
+        console.log('btnCaptureFrontal');
+        const rut = (document.getElementById('rut') as HTMLInputElement).value ;
+        const numeroSerie = (document.getElementById('numeroDocumento') as HTMLInputElement).value;
+        if ( rut.length > 0 && numeroSerie.length > 0 ){
+          showSpinner();
+          (document.getElementById('mode') as HTMLInputElement).value = 'captureFrontal';
+          (document.getElementById('frm') as HTMLFormElement).submit();
+        } else {
+          if ( rut.length === 0 )  (document.getElementById('rut')  as HTMLInputElement).focus();
+          else (document.getElementById('numeroDocumento') as HTMLInputElement).focus();
+        }        
+      });
+    }
+
+
+    if ( btnPosterior !== null ){
+      btnPosterior.addEventListener('click', () => {
+        const rut = (document.getElementById('rut') as HTMLInputElement).value ;
+        const numeroSerie = (document.getElementById('numeroDocumento') as HTMLInputElement).value;
+        if ( rut.length > 0 && numeroSerie.length > 0 ){
+          showSpinner();
+          (document.getElementById('mode') as HTMLInputElement).value = 'capturePosterior';
+          (document.getElementById('frm') as HTMLFormElement).submit();
+        } else {
+          if ( rut.length === 0 )  (document.getElementById('rut')  as HTMLInputElement).focus();
+          else (document.getElementById('numeroDocumento') as HTMLInputElement).focus();
+        }
+      });
+    }
+  });
+
+
+</script>

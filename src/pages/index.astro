@@ -1,0 +1,631 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { AES, enc } from 'crypto-ts';
+import { configEnv } from '../lib/vars';
+import {v4 as uuidv4} from 'uuid';
+import { connect } from '@planetscale/database';
+
+import Barrita from "../components/Barrita.astro";
+
+
+//return Astro.redirect('/plazo-finalizado');
+
+const comunas = [
+  'Santiago', 
+  'Cerrillos', 
+  'Cerro Navia', 
+  'Conchalí', 
+  'El Bosque', 
+  'Estación Central', 
+  'Huechuraba', 
+  'Independencia', 
+  'La Cisterna', 
+  'La Florida', 
+  'La Granja', 
+  'La Pintana', 
+  'La Reina', 
+  'Las Condes', 
+  'Lo Barnechea', 
+  'Lo Espejo', 
+  'Lo Prado', 
+  'Macul', 
+  'Maipú', 
+  'Ñuñoa', 
+  'Pedro Aguirre Cerda', 
+  'Peñalolén', 
+  'Providencia', 
+  'Pudahuel', 
+  'Quilicura', 
+  'Quinta Normal', 
+  'Recoleta', 
+  'Renca',
+  'San Joaquín',
+  'San Miguel',
+  'San Ramón',
+  'Vitacura',
+  'Puente Alto',
+  'San Bernardo',
+];
+
+const config = {
+  host: configEnv.DATABASE_HOST,
+  username: configEnv.DATABASE_USERNAME,
+  password: configEnv.DATABASE_PASSWORD,
+  fetch: (url: any, init: any) => {
+    delete init['cache']
+    return fetch(url, init)
+  }
+}
+
+let errorMsgRunError = '';
+let obj : {[key: string]: any} = {};
+obj.sessionId = uuidv4();
+obj.estadoEmail = false;
+obj.estadoFrontal = 0;
+obj.estadoPosterior = 0;
+obj.estadoFoto = 0;
+obj.intentos = 0;
+obj.rechazada = 0;
+obj.errorCodigo = false;
+obj.emailNoVerificado = false;
+
+obj.rut = '';
+obj.existe = false;
+
+obj.pregunta1 = '';
+obj.pregunta2 = '';
+obj.pregunta3 = '';
+obj.pregunta4 = '';
+obj.pregunta5 = '';
+obj.pregunta6 = '';
+obj.finalizado = false;
+
+
+let showBtn = false;
+let existe = false;
+
+if ( Astro.cookies.has('payload') ) {
+  //recuperar valores de la cookie
+  let encrypted = Astro.cookies.get('payload')?.value as string;
+  let decrypted = AES.decrypt(encrypted, configEnv.SECRET_KEY);
+  obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+  console.log('cookieIndex', {obj});
+
+  if ( obj.pregunta1 === '1' && 
+       obj.pregunta2 === '1' &&
+       obj.pregunta3 === '1' &&
+       obj.pregunta4 === '1' &&
+       obj.pregunta5 === '1'
+  ) {
+    showBtn = true;
+  }
+
+  if ( obj.existe === true ) {
+    return Astro.redirect('/recuperar');
+  }
+}
+
+if (Astro.request.method === "POST") {
+  const data = await Astro.request.formData();
+  console.log(data);
+  const mode = data.get('mode');
+
+  if ( mode === 'verificarRun') {
+    obj.rut = data.get('rut') as string;
+
+    //validar si rut existe en la postulant.
+    const conn = connect(config);
+
+    const query = `select * from ndb_lista where run = :run`;
+    const params = {
+      run: obj.rut.split('-')[0].replaceAll('.', ''),
+    }
+    const result = await conn.execute(query, params);
+    if ( result.rows.length > 0 ) {
+      const row: any = result.rows[0];
+      obj.existe = true;
+      let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+      Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+
+      return Astro.redirect('/aviso');
+    } else {
+      const query = `select * from ndb_postulant where run = :run`;
+      const params = {
+        run: obj.rut.split('-')[0].replaceAll('.', ''),
+      }
+      const result = await conn.execute(query, params);
+      if ( result.rows.length > 0 ) {
+        const row: any = result.rows[0];
+        obj.existe = true;
+        let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+        Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+
+        return Astro.redirect('/recuperar');
+      } else {
+        let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+        Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+      }
+    }    
+  } else {
+    obj.pregunta6 = data.get('pregunta6');
+    let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+    Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+    return Astro.redirect('/formulario');
+  }
+}
+
+---
+<Layout title="Bienvenida">
+  <div class="box">
+    <p>        
+      Hola! Te damos la bienvenida al formulario de postulación para el Diplomado en Competencias Digitales para el Empleo,
+      exclusivo para las mujeres de las 34 comunas urbanas de la región metropolitana.
+    </p>
+    <p>
+      Antes de que iniciemos, es importante asegurarnos de que dispones de las herramientas y habilidades necesarias para realizar el Diplomado. 
+      Necesitarás al menos un computador de escritorio o notebook, conexión a internet y un nivel básico de habilidades digitales.
+    </p>
+    <p>
+    Si tienes alguna pregunta o inquietud acerca del proceso de postulación, no dudes en contactarnos a través de nuestro call center +56 22 582 8796.
+    </p>
+  </div>
+  <form id="frmIndex" method="POST">
+    <input type="hidden" id="mode" name="mode" value="" />
+    <div class="box">
+      <div class="field">
+        <label class="label" for="rut"><Barrita />Ingrese su RUN</label>
+        <div class="input-group flex-nowrap">
+          <span class="input-group-text" id="addon-wrapping"><img src="/static/assets/img/person.svg" alt=""/></span>
+          { obj.rut === '' && <input type="text" id="rut" name="rut" class="form-control" placeholder="Ej. 11111111-1" value={obj.rut} required /> }
+          { obj.rut !== '' && <input type="text" id="rut" name="rut" class="form-control" placeholder="Ej. 11111111-1" value={obj.rut} required disabled/> }
+        </div>
+    
+        <div id="txtRunNoValido" class="alert alert-danger d-none">RUN no válido</div>
+        {errorMsgRunError && 
+          <p class="alert alert-danger"><Fragment set:html={errorMsgRunError} /></p>
+        }
+      </div>
+
+      {
+        obj.rut === '' && 
+        <div class="mt-3">
+          <div class="field">
+            <div class="control row">
+              <div class="col-12" style="text-align: right">
+                <button type="submit" class="btn btn-primary">&raquo; Continuar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+
+    </div>
+
+    <div class="box">
+      <div class="field">
+        <label class="label" for="pregunta1">
+          <Barrita /> ¿Puede realizar acciones como navegar por internet, buscar información utilizando un navegador web, enviar y recibir correos electrónicos, y crear y editar documentos mediante programas como Word o Google Docs?
+        </label>
+        <div class="control">
+          <div>
+            {obj.rut === '' ? 
+              <select id="pregunta1" name="pregunta1" class="form-select pp" disabled>
+                <option value="">Seleccione una opción</option>
+              </select> 
+            :
+              <select id="pregunta1" name="pregunta1" class="form-select pp" required>
+                <option value="">Seleccione una opción</option>
+                {obj.pregunta1 === '1' && 
+                  <option value="1" selected>SÍ</option>
+                  <option value="2">NO</option>
+                }
+                {obj.pregunta1 === '2' && 
+                  <option value="1">SÍ</option>
+                  <option value="2" selected>NO</option>
+                }
+                {obj.pregunta1 === '' && 
+                  <option value="1">SÍ</option>
+                  <option value="2">NO</option>
+                }
+              </select>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div id="alert_pregunta1" class={obj.pregunta1 === '2' ? 'field' : 'field d-none'}>
+        <p class="alert alert-danger">
+          Agradecemos tu interés en el Diplomado en Competencias Digitales para el Empleo. Sin embargo, 
+          este programa requiere un nivel básico de habilidades digitales. 
+          Si estas habilidades le resultan nuevas o desafiantes, le recomendamos primero 
+          explorar cursos de alfabetización digital antes de postular.
+        </p>
+      </div>
+      
+    </div>
+    
+    <div class="box">
+      <div class="field">
+        <label class="label" for="pregunta2">
+          <Barrita /> ¿Cuenta con un computador de escritorio o notebook para realizar el Diplomado?
+        </label>
+        <div class="control">
+          <div>
+            {obj.rut === '' ? 
+              <select id="pregunta2" name="pregunta2" class="form-select pp" disabled>
+                <option value="">Seleccione una opción</option>
+              </select> 
+            :
+            <select id="pregunta2" name="pregunta2" class="form-select pp" required>
+              <option value="">Seleccione una opción</option>
+              {obj.pregunta2 === '1' && 
+                <option value="1" selected>SÍ</option>
+                <option value="2">NO</option>
+              }
+              {obj.pregunta2 === '2' && 
+                <option value="1">SÍ</option>
+                <option value="2" selected>NO</option>
+              }
+              {obj.pregunta2 === '' && 
+                <option value="1">SÍ</option>
+                <option value="2">NO</option>
+              }
+            </select>
+            }
+          </div>
+        </div>
+      </div>
+
+      <div id="alert_pregunta2" class={obj.pregunta2 === '2' ? 'field' : 'field d-none'}>
+        <p class="alert alert-danger">
+          Gracias por considerar inscribirse en el Diplomado en Competencias Digitales para el Empleo. Sin embargo, 
+          es importante informarle que es indispensable contar con un computador para completar todos 
+          los módulos exitosamente. Asegúrese de tener acceso a uno antes de postular.
+        </p>
+      </div>
+
+    </div>
+
+    <div class="box">
+      <div class="field">
+        <label class="label" for="pregunta3">
+          <Barrita />¿Cuenta con conexión a internet permanente? 
+        </label>
+        <div class="control">
+          <div>
+            {obj.rut === '' ? 
+              <select id="pregunta3" name="pregunta3" class="form-select pp" disabled>
+                <option value="">Seleccione una opción</option>
+              </select> 
+            :
+            <select id="pregunta3" name="pregunta3" class="form-select pp" required>
+              <option value="">Seleccione una opción</option>
+              {obj.pregunta3 === '1' && 
+                <option value="1" selected>SÍ</option>
+                <option value="2">NO</option>
+              }
+              {obj.pregunta3 === '2' && 
+                <option value="1">SÍ</option>
+                <option value="2" selected>NO</option>
+              }
+              {obj.pregunta3 === '' && 
+                <option value="1">SÍ</option>
+                <option value="2">NO</option>
+              }
+            </select>
+            }
+          </div>
+        </div>
+      </div>
+      <div id="alert_pregunta3" class={obj.pregunta3 === '2' ? 'field' : 'field d-none'}>
+        <p class="alert alert-danger">
+          Gracias por su interés en el Diplomado en Competencias Digitales para el Empleo. 
+          Sin embargo, es crucial contar con una conexión a internet para participar, ya que gran parte de 
+          las clases y material complementario se encuentra en una plataforma virtual. Si no tiene acceso a internet, 
+          lamentablemente no podrá completar el diplomado. Le recomendamos asegurar una conexión a internet antes de postular.
+        </p>
+      </div>
+    </div>
+
+    <div class="box">
+      <div class="field">
+        <label class="label" for="pregunta4">
+          <Barrita />¿Ha utilizado las plataformas Zoom y Google Meet alguna vez? 
+        </label>
+        <div class="control">
+          <div>
+            {obj.rut === '' ? 
+              <select id="pregunta4" name="pregunta4" class="form-select pp" disabled>
+                <option value="">Seleccione una opción</option>
+              </select> 
+            :
+              <select id="pregunta4" name="pregunta4" class="form-select pp" required>
+                <option value="">Seleccione una opción</option>
+                {obj.pregunta4 === '1' && 
+                  <option value="1" selected>SÍ</option>
+                  <option value="2">NO</option>
+                }
+                {obj.pregunta4 === '2' && 
+                  <option value="1">SÍ</option>
+                  <option value="2" selected>NO</option>
+                }
+                {obj.pregunta4 === '' && 
+                  <option value="1">SÍ</option>
+                  <option value="2">NO</option>
+                }
+              </select>
+            }
+          </div>
+        </div>
+      </div>
+      <div id="alert_pregunta4" class={obj.pregunta4 === '2' ? 'field' : 'field d-none'}>
+        <p class="alert alert-danger">
+          Para participar exitosamente en el diplomado, es necesario estar familiarizado con 
+          herramientas como Zoom y Google Meet. Si no conoce estas plataformas, considere aprender a usarlas.
+        </p>
+      </div>
+    </div>
+
+    <div class="box">
+      <div class="field">
+        <label class="label" for="pregunta5">
+          <Barrita />¿Reside en una de las 34 comunas urbanas de la Región Metropolitana?
+        </label>
+        <p style="text-align: left;">
+          <Fragment set:html={comunas.join(', ')} />
+        </p>
+        <div class="control">
+          <div>
+            {obj.rut === '' ? 
+              <select id="pregunta5" name="pregunta5" class="form-select pp" disabled>
+                <option value="">Seleccione una opción</option>
+              </select> 
+            :
+              <select id="pregunta5" name="pregunta5" class="form-select pp" required>
+                <option value="">Seleccione una opción</option>
+                {obj.pregunta5 === '1' && 
+                  <option value="1" selected>SÍ</option>
+                  <option value="2">NO</option>
+                }
+                {obj.pregunta5 === '2' && 
+                  <option value="1">SÍ</option>
+                  <option value="2" selected>NO</option>
+                }
+                {obj.pregunta5 === '' && 
+                  <option value="1">SÍ</option>
+                  <option value="2">NO</option>
+                }
+              </select>
+            }
+          </div>
+        </div>
+      </div>
+      <div id="alert_pregunta5" class={obj.pregunta5 === '2' ? 'field' : 'field d-none'}>
+        <p class="alert alert-danger">
+          Para participar en el Diplomado de Competencias Digitales para el Empleo, es requisito 
+          excluyente pertenecer a una de las 34 comunas urbanas de la Región Metropolitana (RM). 
+          Si vives en una de las comunas rurales de la RM, puedes postular a Promueve Rural, programa ejecutado 
+          por la Fundación Prodemu, para conocer más información, ingresa a www.promuevempleomujer.cl. 
+          Si resides en otra región, puedes consultar con tu municipio o gobierno regional sobre las oportunidades de capacitación disponibles.
+        </p>
+      </div>
+    </div>
+
+    <div class="box">
+      <div class="field">
+        <div class="label"><Barrita />¿Cómo se enteró del programa Promueve?</div>
+      </div>
+
+      <div class="form-check">
+        {obj.pregunta6 === 'Ferias laborales' ?
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault1" value="Ferias laborales" required checked />
+        :
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault1" value="Ferias laborales" required />
+        }
+        <label class="form-check-label" for="flexRadioDefault1">
+          Ferias laborales
+        </label>
+      </div>
+
+      <div class="form-check">
+        {obj.pregunta6 === 'Redes sociales' ?
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault2" value="Redes sociales" required checked/>
+        :
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault2" value="Redes sociales" required />
+        }
+        
+        <label class="form-check-label" for="flexRadioDefault2">
+          Redes sociales
+        </label>
+      </div>
+
+      <div class="form-check">
+        {obj.pregunta6 === 'Municipio' ?
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault3" value="Municipio" required checked/>
+        :
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault3" value="Municipio" required />
+        }
+        <label class="form-check-label" for="flexRadioDefault3">
+          Municipio
+        </label>
+      </div>
+
+      <div class="form-check">
+        {obj.pregunta6 === 'Empresas' ?
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault4" value="Empresas" required checked />
+        :
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault4" value="Empresas" required />
+        }
+        <label class="form-check-label" for="flexRadioDefault4">
+          Empresas
+        </label>
+      </div>
+
+      <div class="form-check">
+        {obj.pregunta6 === 'Organización o fundación' ?
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault5" value="Organización o fundación" required checked />
+        :
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault5" value="Organización o fundación" required />
+        }
+        <label class="form-check-label" for="flexRadioDefault5">
+          Organización o fundación
+        </label>
+      </div>
+
+      <div class="form-check">
+        {obj.pregunta6 === 'Medios de comunicación' ?
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault6" value="Medios de comunicación" required checked />
+        :
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault6" value="Medios de comunicación" required />
+        }
+        <label class="form-check-label" for="flexRadioDefault6">
+          Medios de comunicación
+        </label>
+      </div>
+
+      <div class="form-check">
+        {obj.pregunta6 === 'CFT o IP' ?
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault7" value="CFT o IP" required checked />
+        :
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault7" value="CFT o IP" required />
+        }
+        <label class="form-check-label" for="flexRadioDefault7">
+          CFT o IP
+        </label>
+      </div>
+
+      <div class="form-check">
+        {obj.pregunta6 === 'Metro' ?
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault7" value="Metro" required checked />
+        :
+        <input class="form-check-input" type="radio" name="pregunta6" id="flexRadioDefault7" value="Metro" required />
+        }
+        <label class="form-check-label" for="flexRadioDefault7">
+          Metro
+        </label>
+      </div>
+
+    </div>   
+    
+    <div class="box mb-3">
+      <div class="field">
+        <div class="control row">
+          <div class="col-6">
+            <p>
+              <a href="/limpiar" class="btn btn-danger">&raquo; Limpiar</a>
+            </p>
+          </div>
+          <div class="col-6" style="text-align: right">
+            {showBtn ? 
+            <button id="btnSubmit1" type="submit" class="btn btn-primary">&raquo; Continuar</button> :
+            <button id="btnSubmit1" type="submit" class="btn btn-primary" disabled>&raquo; Continuar</button>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+    
+  </form>
+  <script>
+    import {  validate, format } from 'rut.js';
+    const loadingDiv = document.getElementById('loading') as HTMLElement;
+    function showSpinner() { loadingDiv.style.visibility = 'visible'; }
+    function hideSpinner() { loadingDiv.style.visibility = 'hidden'; }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const inputRut = document.getElementById('rut') as HTMLInputElement;
+      if ( inputRut !== null ) {
+        inputRut.addEventListener('keyup', function() {
+          if ( inputRut.value.length > 2 ) {
+            let rutFormateado = format(inputRut.value);
+            inputRut.value = rutFormateado;
+          }
+        });
+
+        inputRut.addEventListener('blur', function() {
+          if ( inputRut.value.length > 0 ) {
+            if ( validate(inputRut.value) === false ) {
+              document.getElementById('txtRunNoValido')?.classList.remove("d-none");
+              inputRut.focus();
+            } else {
+              //revisar si existe....
+              showSpinner();
+              (document.getElementById('mode') as HTMLInputElement).value = 'verificarRun';
+              (document.getElementById('frmIndex') as HTMLFormElement).submit();
+            }
+          }
+        });
+      }
+
+      const elements = document.querySelectorAll<HTMLInputElement>('.pp');
+
+      elements.forEach(element => {
+        element.addEventListener('change', async function(){
+          //console.log(element.id, element.value);
+
+          (document.getElementById('mode') as HTMLInputElement).value = 'options';
+          showSpinner();
+
+          const frm = document.getElementById('frmIndex') as HTMLFormElement;
+          const formData = new FormData(frm);
+
+          /*for (var [key, value] of formData.entries()) { 
+            console.log(key, value);
+          }*/
+
+          await fetch("/api/preguntas", {
+            method: "POST",
+            body: formData,
+          });
+
+          //console.log(await response.text());
+
+
+          const divAlert = document.getElementById(`alert_${element.id}`) as HTMLElement;
+          if ( element.value === '2') {
+            divAlert.classList.remove('d-none');
+          } else {
+            divAlert.classList.add('d-none');
+          }
+
+          let allOptionsOneSelected = true;
+          elements.forEach(element1 => {
+            console.log('--> ', element1.id, element1.value);
+            if ( element1.value === '2' || element1.value === '') {
+              allOptionsOneSelected = false;
+            }
+          });
+
+          console.log({allOptionsOneSelected});
+
+          const btn = document.getElementById('btnSubmit1') as HTMLButtonElement;
+          btn.disabled = !allOptionsOneSelected;
+
+          hideSpinner();
+        });
+      });
+
+      if ( inputRut.value === '') {
+        inputRut.focus();
+      }
+      
+
+      if ( document.getElementById('btnSubmit1') ) {
+
+        (document.getElementById("btnSubmit1") as HTMLInputElement).addEventListener('click', function(event) {
+          //event.preventDefault();
+          /*const frm = (document.getElementById('frm') as HTMLFormElement);
+          frm.reportValidity();
+          frm.classList.add('was-validated')
+
+          if (frm.checkValidity() === true ) {
+            frm.submit();
+          }*/
+
+        });
+      }
+
+
+    });
+  </script>
+</Layout>

@@ -1,0 +1,53 @@
+---
+import { configEnv } from "../lib/vars";
+import { AES, enc } from 'crypto-ts';
+import { connect } from '@planetscale/database';
+
+const config = {
+  host: configEnv.DATABASE_HOST,
+  username: configEnv.DATABASE_USERNAME,
+  password: configEnv.DATABASE_PASSWORD,
+  fetch: (url: any, init: any) => {
+    delete init['cache']
+    return fetch(url, init)
+  }
+}
+
+const token = Astro.url.searchParams.get("token");
+
+if ( token === null ) {
+  return Astro.redirect('/no-nos-vulneres'); 
+} else {
+  let decodeBase64Token = atob(token);
+  let decrypted = AES.decrypt(decodeBase64Token, configEnv.SECRET_KEY);
+  const obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+
+  //console.log({token, decodeBase64Token, obj});
+
+  if ( obj.hasOwnProperty('rut') ) {
+    console.log(obj);
+    Astro.cookies.set('token', token, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+
+    //validar si ya tiene sale e ir al resumen.
+    const conn = connect(config);
+  
+    const query = `select * from ndb_postulant where run = :run`;
+    const params = {
+      run: obj.rut.split('-')[0].replaceAll('.', ''),
+    }
+    const result = await conn.execute(query, params);
+    if ( result.rows.length > 0 ) {
+      const row = result.rows[0];
+      if ( row.id_room !== null ) {
+        return Astro.redirect('/postulacion');
+      } else {
+        return Astro.redirect('/documentacion');
+      }
+    } else {
+      return Astro.redirect('/no-nos-vulneres');
+    }
+  } else {
+    return Astro.redirect('/no-nos-vulneres');
+  }
+}
+---

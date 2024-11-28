@@ -1,0 +1,85 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { AES, enc } from 'crypto-ts';
+import { configEnv } from '../lib/vars';
+import { connect } from '@planetscale/database';
+import { obfuscateEmail } from "../lib/utils";
+
+const config = {
+  host: configEnv.DATABASE_HOST,
+  username: configEnv.DATABASE_USERNAME,
+  password: configEnv.DATABASE_PASSWORD,
+  fetch: (url: any, init: any) => {
+    delete init['cache']
+    return fetch(url, init)
+  }
+}
+
+let obj : {[key: string]: any} = {};
+let row : {[key: string]: any} = {};
+let nombres  = '';
+
+if ( Astro.cookies.has('payload') ) {
+  //recuperar valores de la cookie
+  let encrypted = Astro.cookies.get('payload')?.value as string;
+  let decrypted = AES.decrypt(encrypted, configEnv.SECRET_KEY);
+  obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+  console.log('cookieIndex', {obj});
+
+  const conn = connect(config);
+  const query = `select * from ndb_lista where run = :run`;
+  const params = {
+    run: obj.rut.split('-')[0].replaceAll('.', ''),
+  }
+  const result = await conn.execute(query, params);
+  if ( result.rows.length > 0 ) {
+    row = result.rows[0];
+
+    nombres = row.nombre.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
+
+  } else {
+    return Astro.redirect('/limpiar');
+  }
+} else {
+  return Astro.redirect('/limpiar');
+}
+
+---
+
+<Layout title="Bienvenida">
+
+  <div class="box">
+    <p>        
+      Hola, {nombres}
+    </p>
+    <p>
+      El RUT <b>{obj.rut}</b> proporcionado ya participo en el primer ciclo del diplomado.
+    </p>
+
+    <p>Si tiene alguna pregunta o necesita asistencia adicional, no dude en contactarnos.</p>
+    <div class="field">
+      <div class="control row">
+        <div class="col-6">
+          <p>
+            <a href="/limpiar" class="btn btn-warning">Volver al inicio</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const loadingDiv = document.getElementById('loading') as HTMLElement;
+    function showSpinner() { loadingDiv.style.visibility = 'visible'; }
+    //function hideSpinner() { loadingDiv.style.visibility = 'hidden'; }
+
+    if ( document.getElementById('frmLink') ) {
+      (document.getElementById("frmLink") as HTMLInputElement).addEventListener('click', function(event) {
+        event.preventDefault();
+        const frm = (document.getElementById('frmLink') as HTMLFormElement);
+        showSpinner();
+        frm.submit();
+      });
+    }
+  </script>
+</Layout>

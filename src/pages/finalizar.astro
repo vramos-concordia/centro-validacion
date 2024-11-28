@@ -1,0 +1,173 @@
+---
+import { configEnv } from '../lib/vars';
+import { AES, enc } from 'crypto-ts';
+import { connect } from '@planetscale/database';
+import Layout from '../layouts/Layout.astro';
+import DatosBancarios from '../components/DatosBancarios.astro';
+
+const config = {
+  host: configEnv.DATABASE_HOST,
+  username: configEnv.DATABASE_USERNAME,
+  password: configEnv.DATABASE_PASSWORD,
+  fetch: (url: any, init: any) => {
+    delete init['cache']
+    return fetch(url, init)
+  }
+}
+
+let obj : {[key: string]: any} = {};
+let row : {[key: string]: any} = {};
+let documentsSolicitados : {[key: string]: any} = {};
+let nombres = '';
+
+if ( Astro.cookies.has('token') ) {
+  //recuperar valores de la cookie
+  let token = Astro.cookies.get('token')?.value as string;
+  let decodeBase64Token = atob(token);
+  let decrypted = AES.decrypt(decodeBase64Token, configEnv.SECRET_KEY);
+  obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+  //console.log('cookie-documentacion', {obj});
+
+  const conn = connect(config);
+  
+  const query = `select * from ndb_postulant where run = :run`;
+  const params = {
+    run: obj.rut.split('-')[0].replaceAll('.', ''),
+  }
+  const result = await conn.execute(query, params);
+  if ( result.rows.length > 0 ) {
+    row = result.rows[0];
+    //console.log(row);
+    nombres = `${row.names} ${row.lastn} ${row.lastnm}`;
+
+    documentsSolicitados.licencia_media = false;
+
+    if ( row.have_children_under_5_years === 1 ) {
+      Array(parseInt(row.num__children_under_5_years)).fill(0).map((_val, index) => {
+        documentsSolicitados[`certificado_nacimiento_menor_5_11_h_${index + 1}`] = false;
+      });
+    }
+
+    if ( row.have_children_under_18_years_isabilities === 1 ) {
+      Array(parseInt(row.num_children_under_18_years_isabilities)).fill(0).map((_val, index) => {
+        documentsSolicitados[`certificado_nacimiento_entre_6_18_h_${index + 1}`] = false;
+        documentsSolicitados[`certificado_discapacidad_entre_6_18_h_${index + 1}`] = false;
+      });
+    }
+
+    const query0 = `select * from ndb_documents where dni = :dni`;
+    const params0 = {
+      dni: obj.rut.split('-')[0].replaceAll('.', ''),
+    }
+    const result0 = await conn.execute(query0, params0);
+    if ( result0.rows.length > 0 ) {
+      for ( let i = 0; i < result0.rows.length; i++ ) {
+        let row0: any = result0.rows[i];
+        if ( row0.status === 2 || row0.status === 3 || row0.status === 4 ) {
+          documentsSolicitados[row0.document_key] = true;
+        }
+      }
+    }
+
+    console.log(documentsSolicitados);
+    let finalizado = true;
+    for ( const keyDoc in documentsSolicitados) {
+      if ( documentsSolicitados[keyDoc] === false ) {
+        finalizado = false;
+      }
+    }
+
+    if ( finalizado === true ) {
+      //console.log(row);
+      //enviar correo.
+      //actualizar el estado finalizado, si tienes hijos solicitar datos bancarios... 
+      const query1 = `update ndb_postulant set post_finished = :post_finished where run = :run`;
+      const params1 = {
+        post_finished: 1,
+        run: row.run
+      }
+      await conn.execute(query1, params1);
+
+      if ( row.have_children_under_5_years === 2 && row.have_children_under_18_years_isabilities === 2 ) {
+        return Astro.redirect('/sala');
+      } else {
+        if ( row.bank !== null && row.account_type != null && row.account_number != null) {
+          return Astro.redirect('/sala');
+        }
+      }
+
+      //POST datos bancarios.
+      if (Astro.request.method === "POST") {
+        const data = await Astro.request.formData();
+        console.log(data);
+
+        const queryU = `update ndb_postulant set bank = :bank, account_type = :account_type, account_number = :account_number where run = :run`;
+        const paramsU = {
+          run: row.run,
+          bank: data.get('banco'),
+          account_type : data.get('tipocuenta'),
+          account_number : data.get('numero_cuenta')
+        }
+        const resultU = await conn.execute(queryU, paramsU);
+        console.log(resultU);
+        if ( resultU.rowsAffected > 0 ) {
+          return Astro.redirect('/sala');
+        }
+      }
+
+    } else {
+      return Astro.redirect('/documentacion');
+    }
+  }
+}
+---
+<Layout title="Finalizar">
+   <div class="box">
+    <div class="field">
+      <p>        
+        Hola {nombres},
+      </p>
+      <p>
+        Nos complace informarle que sus datos han sido confirmados exitosamente.
+      </p>
+      <div class="alert alert-success">
+        Le solicitamos sus datos bancarios para la transferencia del bono de cuidados por asistencia a clases presenciales 
+        (Este bono se pagará solamente al verificar la asistencia presencial a las clases con la firma en la lista de asistencia,
+         dentro de los períodos asociados al ciclo básico y de especialización)
+      </div>
+    </div>
+
+    <form id="frmDatosBancarios" method="POST">
+      <DatosBancarios></DatosBancarios>
+      <div class="field">
+        <div class="control row">
+          <div class="col-12" style="text-align: right">
+            <button id="btnDatosBancarios" type="submit" class="btn btn-primary">&raquo; Continuar</button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+  <script>
+    if ( document.getElementById('btnDatosBancarios') ) {
+
+      const loadingDiv = document.getElementById('loading') as HTMLElement;
+      function showSpinner() { loadingDiv.style.visibility = 'visible'; }
+      function hideSpinner() { loadingDiv.style.visibility = 'hidden'; }
+
+      (document.getElementById("btnDatosBancarios") as HTMLInputElement).addEventListener('click', function(event) {
+        event.preventDefault();
+        const frm = (document.getElementById('frmDatosBancarios') as HTMLFormElement);
+        frm.reportValidity();
+        frm.classList.add('was-validated')
+
+        if (frm.checkValidity() === true ) {
+          showSpinner();
+          frm.submit();
+        }
+
+      });
+    }
+  </script>
+    
+</Layout>
