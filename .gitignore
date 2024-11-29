@@ -1,2 +1,3 @@
 node_modules
 /src/lib/vars.ts
+/src/pages/cedula-frontal.astro
