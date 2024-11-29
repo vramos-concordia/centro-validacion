@@ -96,7 +96,7 @@ if ( Astro.cookies.has('payload') ) {
   //console.log('cookie', {obj});
 
   if ( obj.finalizado === false ) {
-    return Astro.redirect('/formulario');
+    return Astro.redirect('/f/datos-personales');
   }
 
   nombres = obj.nombres.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
@@ -129,24 +129,24 @@ if ( Astro.cookies.has('payload') ) {
       sex: obj.sex,
       email: obj.email,
       cellphone: obj.telefono1,
-      educational_level: obj.nivel_escolaridad,
+      educational_level: obj.nivel_escolaridad || null,
       region_reside: 13,
       commune_reside: obj.comuna,
       address: obj.direccion,
-      support: obj.situacion_discapacidad,
+      support: obj.situacion_discapacidad || null,
       need_attendance: obj.necesidad_asistencia || null,
-      have_children_under_5_years: obj.menor6,
+      have_children_under_5_years: obj.menor6 || null,
       num__children_under_5_years: obj.cuantos_menor6 || null,
-      have_children_under_18_years_isabilities: obj.situacion_discapacidad_mayor6,
+      have_children_under_18_years_isabilities: obj.situacion_discapacidad_mayor6 || null,
       num_children_under_18_years_isabilities: obj.cuantos_discapacidad || null,
-      bank: obj.banco,
-      account_type: obj.tipocuenta,
-      account_number: obj.numero_cuenta,
-      handle_a_computer: obj.pregunta1,
-      have_a_computer: obj.pregunta2,
-      have_permanent_internet: obj.pregunta3,
-      have_used_conferencing_platforms: obj.pregunta4,
-      reside_in_one_34_urban_commune: obj.pregunta5,
+      bank: obj.banco || null,
+      account_type: obj.tipocuenta || null,
+      account_number: obj.numero_cuenta || null,
+      handle_a_computer: obj.pregunta1 || null,
+      have_a_computer: obj.pregunta2 || null,
+      have_permanent_internet: obj.pregunta3 || null,
+      have_used_conferencing_platforms: obj.pregunta4 || null,
+      reside_in_one_34_urban_commune: obj.pregunta5 || null,
       accept_terms: 1,
       url_access: enlace,
       comoseentero: obj.pregunta6

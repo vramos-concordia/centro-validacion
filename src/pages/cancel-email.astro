@@ -16,7 +16,7 @@ if ( Astro.cookies.has('payload') ) {
   encrypted = AES.encrypt(JSON.stringify(obj),configEnv.SECRET_KEY).toString();
   Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
 
-  return Astro.redirect('/formulario');
+  return Astro.redirect('/f/datos-personales');
 }
 
 ---

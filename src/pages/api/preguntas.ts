@@ -13,14 +13,6 @@ export const POST: APIRoute = async ({ cookies, request }) => {
     obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
     console.log('cookieEndpoint', {obj});
 
-    const formData = await request.formData();
-    obj.pregunta1 = formData.get('pregunta1');
-    obj.pregunta2 = formData.get('pregunta2');
-    obj.pregunta3 = formData.get('pregunta3');
-    obj.pregunta4 = formData.get('pregunta4');
-    obj.pregunta5 = formData.get('pregunta5');
-    obj.pregunta6 = formData.get('pregunta6');
-
     encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
     cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
 

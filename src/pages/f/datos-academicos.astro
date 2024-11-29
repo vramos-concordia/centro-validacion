@@ -1,0 +1,206 @@
+---
+import CorreoElectronico from "../../components/CorreoElectronico.astro";
+import Identidad from "../../components/Identidad.astro";
+import Telefono from "../../components/Telefono.astro";
+import Layout from "../../layouts/Layout.astro";
+
+import { AES, enc } from "crypto-ts";
+import { getCode } from "../../lib/utils";
+
+import { connect } from "@planetscale/database";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import {
+	getDifference,
+	getFullDateFromMRZ,
+	getFullDateFromMRZMySQL,
+} from "../../lib/utils";
+
+import ModalCorreo from "../../components/ModalCorreo.astro";
+import Direccion from "../../components/Direccion.astro";
+import Discapacidad from "../../components/Discapacidad.astro";
+import ServiciosdeCuidados from "../../components/ServiciosdeCuidados.astro";
+import TerminosyCondiciones from "../../components/TerminosyCondiciones.astro";
+import Nivelescolaridad from "../../components/Nivelescolaridad.astro";
+import { configEnv } from "../../lib/vars";
+
+import { v4 as uuidv4 } from "uuid";
+
+//return Astro.redirect('/plazo-finalizado');
+
+const config = {
+	host: configEnv.DATABASE_HOST,
+	username: configEnv.DATABASE_USERNAME,
+	password: configEnv.DATABASE_PASSWORD,
+	fetch: (url: any, init: any) => {
+		delete init["cache"];
+		return fetch(url, init);
+	},
+};
+
+const S3 = new S3Client({
+	region: "auto",
+	endpoint: configEnv.R2_ENDPOINT,
+	credentials: {
+		accessKeyId: configEnv.R2_ACCESS_KEY_ID,
+		secretAccessKey: configEnv.R2_SECRET_ACCESS_KEY,
+	},
+});
+
+let errores: string[] = [];
+
+let fields: any;
+
+let obj: { [key: string]: any } = {};
+
+if (Astro.cookies.has("payload")) {
+	//recuperar valores de la cookie
+	let encrypted = Astro.cookies.get("payload")?.value as string;
+	let decrypted = AES.decrypt(encrypted, configEnv.SECRET_KEY);
+	obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+	console.log("cookieForm.", { obj });
+
+	encrypted = AES.encrypt(
+		JSON.stringify(obj),
+		configEnv.SECRET_KEY,
+	).toString();
+	Astro.cookies.set("payload", encrypted, {
+		path: "/",
+		httpOnly: true,
+		secure: true,
+		sameSite: "lax",
+	});
+} else {
+	return Astro.redirect("/f/datos-personales");
+}
+
+if (Astro.request.method === "POST") {
+	const data = await Astro.request.formData();
+	console.log(data);
+
+	obj.mode = data.get("mode") as string;
+
+	//actions.
+
+	if (obj.mode === "validarCodeEmail") {
+		const code = data.get("code") as string;
+		if (code === obj.codigoVerificacionEmail) {
+			obj.mode = "";
+			obj.estadoEmail = true;
+		} else {
+			obj.errorCodigo = true;
+			obj.mode = "sendCodeCorreo";
+		}
+	} else {
+		obj.rut = data.get("rut") as string;
+		obj.numeroSerie = data.get("numero_documento") as string;
+		obj.email = data.get("email") as string;
+		obj.telefono1 = data.get("telefono1") as string;
+		obj.telefono2 = data.get("telefono2") as string;
+		obj.nombres = data.get("nombres");
+		obj.apellido1 = data.get("apellido1");
+		obj.apellido2 = data.get("apellido2");
+		obj.fecha_nacimiento = data.get("fecha_nacimiento");
+		obj.nacionalidad = data.get("nacionalidad");
+		obj.region = data.get("region");
+		obj.comuna = data.get("comuna");
+		obj.direccion = data.get("direccion");
+		obj.declaraciondireccion = data.get("declaraciondireccion");
+		/*obj.banco = data.get('banco');
+		obj.tipocuenta = data.get('tipocuenta');
+		obj.numero_cuenta = data.get('numero_cuenta');*/
+		obj.aceptoTerminosYCondiciones = data.get("aceptoTerminosYCondiciones");
+
+		if (obj.mode === "savePostulacion") {
+			console.log(obj);
+
+			
+
+			if (errores.length === 0) {
+				obj.finalizado1 = true;
+
+				let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+				Astro.cookies.set("payload", encrypted, {
+					path: "/",
+					httpOnly: true,
+					secure: true,
+					sameSite: "lax",
+				});
+
+				return Astro.redirect("/confirmacion");
+			} else {
+				obj.finalizado1 = false;
+			}
+		}
+	}
+
+	let encrypted = AES.encrypt(
+		JSON.stringify(obj),
+		configEnv.SECRET_KEY,
+	).toString();
+	Astro.cookies.set("payload", encrypted, {
+		path: "/",
+		httpOnly: true,
+		secure: true,
+		sameSite: "lax",
+	});
+}
+---
+
+<Layout title="UAH.">
+	<ModalCorreo obj={obj} />
+
+	<form id="frm" method="POST" class="box">
+		{
+			errores.length > 0 && (
+				<div class="alert alert-danger" role="alert">
+					<strong>Corrija los siguientes errores: </strong>
+					<ul class="m-1">
+						{errores.map((item: any) => (
+							<li>
+								<Fragment set:html={item} />
+							</li>
+						))}
+					</ul>
+				</div>
+			)
+		}
+
+		<input type="hidden" id="mode" name="mode" value="savePostulacion" />
+		<Nivelescolaridad obj={obj}></Nivelescolaridad>
+
+		<div class="field">
+			<div class="control row">
+				<div class="col-6">
+					<p>
+						<a href="/" class="btn btn-warning">&raquo; Volver</a>
+					</p>
+				</div>
+				<div class="col-6" style="text-align: right">
+					<button
+						id="btnSubmitInscripcion"
+						type="submit"
+						class="btn btn-primary">&raquo; Siguiente</button
+					>
+				</div>
+			</div>
+		</div>
+	</form>
+	<script>
+		if (document.getElementById("btnSubmitInscripcion")) {
+			(
+				document.getElementById(
+					"btnSubmitInscripcion",
+				) as HTMLInputElement
+			).addEventListener("click", function (event) {
+				event.preventDefault();
+				const frm = document.getElementById("frm") as HTMLFormElement;
+				frm.reportValidity();
+				frm.classList.add("was-validated");
+				if (frm.checkValidity() === true) {
+					frm.submit();
+				}
+			});
+		}
+	</script>
+</Layout>

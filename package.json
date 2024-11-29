@@ -28,6 +28,7 @@
     "uuid": "^10.0.0"
   },
   "devDependencies": {
+    "@types/cropperjs": "^1.1.5",
     "@types/uuid": "^9.0.8",
     "@vitejs/plugin-basic-ssl": "^1.1.0"
   }

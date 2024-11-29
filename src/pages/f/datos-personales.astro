@@ -1,24 +1,26 @@
 ---
-import CorreoElectronico from '../components/CorreoElectronico.astro';
-import Identidad from '../components/Identidad.astro';
-import Telefono from '../components/Telefono.astro';
-import Layout from '../layouts/Layout.astro';
+import CorreoElectronico from '../../components/CorreoElectronico.astro';
+import Identidad from '../../components/Identidad.astro';
+import Telefono from '../../components/Telefono.astro';
+import Layout from '../../layouts/Layout.astro';
 
 import { AES, enc } from 'crypto-ts';
-import { getCode } from "../lib/utils";
+import { getCode } from "../../lib/utils";
 
 import { connect } from '@planetscale/database';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { getDifference, getFullDateFromMRZ, getFullDateFromMRZMySQL } from "../lib/utils";
+import { getDifference, getFullDateFromMRZ, getFullDateFromMRZMySQL } from "../../lib/utils";
 
-import ModalCorreo from '../components/ModalCorreo.astro';
-import Direccion from '../components/Direccion.astro';
-import Discapacidad from '../components/Discapacidad.astro';
-import ServiciosdeCuidados from '../components/ServiciosdeCuidados.astro';
-import TerminosyCondiciones from '../components/TerminosyCondiciones.astro';
-import Nivelescolaridad from '../components/Nivelescolaridad.astro';
-import { configEnv } from '../lib/vars';
+import ModalCorreo from '../../components/ModalCorreo.astro';
+import Direccion from '../../components/Direccion.astro';
+import Discapacidad from '../../components/Discapacidad.astro';
+import ServiciosdeCuidados from '../../components/ServiciosdeCuidados.astro';
+import TerminosyCondiciones from '../../components/TerminosyCondiciones.astro';
+import Nivelescolaridad from '../../components/Nivelescolaridad.astro';
+import { configEnv } from '../../lib/vars';
+
+import {v4 as uuidv4} from 'uuid';
 
 
 //return Astro.redirect('/plazo-finalizado');
@@ -53,10 +55,10 @@ let errorMsgSerieError = '';
 let cargarFrontal = false;
 let cargarPosterior = false;
 
-let imagenFrontal = null;
-let imagenPosterior = null;
+let imagenFrontal : any;
+let imagenPosterior : any;
 
-let fields = null;
+let fields : any;
 
 let emailYaUsado = false;
 
@@ -69,26 +71,6 @@ if ( Astro.cookies.has('payload') ) {
   let decrypted = AES.decrypt(encrypted, configEnv.SECRET_KEY);
   obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
   console.log('cookieForm.', {obj});
-
-  if ( obj.pregunta1 === '2' || 
-       obj.pregunta2 === '2' ||
-       obj.pregunta3 === '2' ||
-       obj.pregunta4 === '2' ||
-       obj.pregunta5 === '2' ||
-       obj.pregunta6 === null
-  ) {
-    return Astro.redirect('/');
-  }
-
-  if ( obj.pregunta1 === '' || 
-       obj.pregunta2 === '' ||
-       obj.pregunta3 === '' ||
-       obj.pregunta4 === '' ||
-       obj.pregunta5 === '' ||
-       obj.pregunta6 === ''
-  ) {
-    return Astro.redirect('/');
-  }
 
 
   if ( obj.estadoFrontal !== 0 ) {
@@ -310,7 +292,25 @@ if ( Astro.cookies.has('payload') ) {
   
 
 } else {
-  return Astro.redirect('/');
+  let obj : {[key: string]: any} = {};
+  obj.sessionId = uuidv4();
+  obj.estadoEmail = false;
+  obj.estadoFrontal = 0;
+  obj.estadoPosterior = 0;
+  obj.estadoFoto = 0;
+  obj.intentos = 0;
+  obj.rechazada = 0;
+  obj.errorCodigo = false;
+  obj.emailNoVerificado = false;
+
+  obj.rut = '';
+  obj.existe = false;
+
+  obj.finalizado1 = false;
+
+  let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
+  Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
+  return Astro.redirect('/f/datos-personales');
 }
 
 if (Astro.request.method === "POST") {
@@ -336,25 +336,18 @@ if (Astro.request.method === "POST") {
     obj.email = data.get('email') as string;
     obj.telefono1 = data.get('telefono1') as string;
     obj.telefono2 = data.get('telefono2') as string;
-    /*obj.nombres = data.get('nombres');
+    obj.nombres = data.get('nombres');
     obj.apellido1 = data.get('apellido1');
     obj.apellido2 = data.get('apellido2');
     obj.fecha_nacimiento = data.get('fecha_nacimiento');
-    obj.nacionalidad = data.get('nacionalidad');*/
-    obj.estadocivil = data.get('estadocivil');
-    obj.nivel_escolaridad = data.get('nivel_escolaridad');
+    obj.nacionalidad = data.get('nacionalidad');
+    obj.region = data.get('region');
     obj.comuna = data.get('comuna');
     obj.direccion = data.get('direccion');
     obj.declaraciondireccion = data.get('declaraciondireccion');
-    obj.situacion_discapacidad = data.get('situacion_discapacidad');
-    obj.necesidad_asistencia = data.get('necesidad_asistencia');
-    obj.menor6 = data.get('menor6');
-    obj.cuantos_menor6 = data.get('cuantos_menor6');
     /*obj.banco = data.get('banco');
     obj.tipocuenta = data.get('tipocuenta');
     obj.numero_cuenta = data.get('numero_cuenta');*/
-    obj.situacion_discapacidad_mayor6 = data.get('situacion_discapacidad_mayor6');
-    obj.cuantos_discapacidad = data.get('cuantos_discapacidad');
     obj.aceptoTerminosYCondiciones = data.get('aceptoTerminosYCondiciones');
 
     if ( obj.mode === 'sendCodeCorreo' ) {
@@ -441,10 +434,6 @@ if (Astro.request.method === "POST") {
         errores.push('Cargue imagen de tu cédula de identidad <b>Posterior</b>');
       }
 
-      if ( obj.estadocivil === null || obj.estadocivil === '' ) {
-        errores.push('Estado Civil');
-      }
-
       if ( obj.email === null || obj.email === '' ) {
         errores.push('Correo electrónico');
       }
@@ -465,8 +454,8 @@ if (Astro.request.method === "POST") {
         errores.push('Los números de teléfono ingresados no son iguales.');
       }
 
-      if ( obj.nivel_escolaridad === null || obj.nivel_escolaridad === '' ) {
-        errores.push('Nivel de escolaridad');
+      if ( obj.region === null || obj.region === '' ) {
+        errores.push('Región');
       }
 
       if ( obj.comuna === null || obj.comuna === '' ) {
@@ -481,50 +470,19 @@ if (Astro.request.method === "POST") {
         errores.push('Debe declarar que la información de su dirección entregada es fidedigna.');
       }
 
-      if ( obj.situacion_discapacidad === null || obj.situacion_discapacidad === '' ) {
-        errores.push('Situación de Discapacidad');
-      }
-      
-      if ( obj.situacion_discapacidad === '1' ) {
-        if ( obj.necesidad_asistencia === null || obj.necesidad_asistencia === '' ) {
-          errores.push('Necesidad de Asistencia');
-        }
-      }
-      
-      if ( obj.menor6 === null || obj.menor6 === '' ) {
-        errores.push('Tiene hijas/os menores de 5 años 11 meses');
-      }
-
-      if ( obj.menor6 === '1' ) {
-        if ( obj.cuantos_menor6 === null || obj.cuantos_menor6 === '' ) {
-          errores.push('Cuántos hijas/os menores de 5 años 11 meses');
-        }
-      }
-
-
-      if ( obj.situacion_discapacidad_mayor6 === null || obj.situacion_discapacidad_mayor6 === '' ) {
-        errores.push('Tiene hijas/os entre 6 a 18 años en situación de discapacidad');
-      }
-
-      if ( obj.situacion_discapacidad_mayor6 === '1' ) {
-        if ( obj.cuantos_discapacidad === null || obj.cuantos_discapacidad === '' ) {
-          errores.push('Cuántos hijas/os entre 6 a 18 años en situación de discapacidad');
-        }
-      }
-
       if ( obj.aceptoTerminosYCondiciones === null || obj.aceptoTerminosYCondiciones === '' ) {
         errores.push('Debe aceptar los terminos y condiciones.');
       }
 
       if ( errores.length === 0 ) {
-        obj.finalizado = true;
+        obj.finalizado1 = true;
 
         let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
         Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
 
         return Astro.redirect('/confirmacion');
       } else {
-        obj.finalizado = false;
+        obj.finalizado1 = false;
       }
     }
   }
@@ -565,10 +523,7 @@ if (Astro.request.method === "POST") {
                ></Identidad>
     <CorreoElectronico obj={obj} emailYaUsado={emailYaUsado}></CorreoElectronico>
     <Telefono obj={obj}></Telefono>
-    <Nivelescolaridad obj={obj}></Nivelescolaridad>
     <Direccion obj={obj}></Direccion>
-    <Discapacidad obj={obj}></Discapacidad>
-    <ServiciosdeCuidados obj={obj}></ServiciosdeCuidados>
     <TerminosyCondiciones obj={obj}></TerminosyCondiciones>
 
     <div class="field">

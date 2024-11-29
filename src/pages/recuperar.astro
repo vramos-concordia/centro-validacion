@@ -27,7 +27,7 @@ if ( Astro.cookies.has('payload') ) {
   obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
   console.log('cookieIndex', {obj});
 
-  const conn = connect(config);
+  /*const conn = connect(config);
   const query = `select * from ndb_postulant where run = :run`;
   const params = {
     run: obj.rut.split('-')[0].replaceAll('.', ''),
@@ -38,7 +38,7 @@ if ( Astro.cookies.has('payload') ) {
     obfuscatedEmail = obfuscateEmail(row.email, 0.5, 0.5);
   } else {
     return Astro.redirect('/limpiar');
-  }
+  }*/
 
   if (Astro.request.method === "POST") {
     console.log(row);

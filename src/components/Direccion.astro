@@ -1,58 +1,111 @@
 ---
 const { obj } = Astro.props;
 
-const comunas = [
-  'Santiago', 
-  'Cerrillos', 
-  'Cerro Navia', 
-  'Conchalí', 
-  'El Bosque', 
-  'Estación Central', 
-  'Huechuraba', 
-  'Independencia', 
-  'La Cisterna', 
-  'La Florida', 
-  'La Granja', 
-  'La Pintana', 
-  'La Reina', 
-  'Las Condes', 
-  'Lo Barnechea', 
-  'Lo Espejo', 
-  'Lo Prado', 
-  'Macul', 
-  'Maipú', 
-  'Ñuñoa', 
-  'Pedro Aguirre Cerda', 
-  'Peñalolén', 
-  'Providencia', 
-  'Pudahuel', 
-  'Quilicura', 
-  'Quinta Normal', 
-  'Recoleta', 
-  'Renca',
-  'San Joaquín',
-  'San Miguel',
-  'San Ramón',
-  'Vitacura',
-  'Puente Alto',
-  'San Bernardo',
+const regiones = [
+  {
+    "codigo": "15",
+    "region": "Arica y Parinacota",
+    "capital": "Arica"
+  },
+  {
+    "codigo": "01",
+    "region": "Tarapacá",
+    "capital": "Iquique"
+  },
+  {
+    "codigo": "02",
+    "region": "Antofagasta",
+    "capital": "Antofagasta"
+  },
+  {
+    "codigo": "03",
+    "region": "Atacama",
+    "capital": "Copiapó"
+  },
+  {
+    "codigo": "04",
+    "region": "Coquimbo",
+    "capital": "La Serena"
+  },
+  {
+    "codigo": "05",
+    "region": "Valparaíso",
+    "capital": "Valparaíso"
+  },
+  {
+    "codigo": "13",
+    "region": "Metropolitana de Santiago",
+    "capital": "Santiago"
+  },
+  {
+    "codigo": "06",
+    "region": "Libertador General Bernardo O’Higgins",
+    "capital": "Rancagua"
+  },
+  {
+    "codigo": "07",
+    "region": "Maule",
+    "capital": "Talca"
+  },
+  {
+    "codigo": "16",
+    "region": "Ñuble",
+    "capital": "Chillán"
+  },
+  {
+    "codigo": "08",
+    "region": "Biobío",
+    "capital": "Concepción"
+  },
+  {
+    "codigo": "09",
+    "region": "La Araucanía",
+    "capital": "Temuco"
+  },
+  {
+    "codigo": "14",
+    "region": "Los Ríos",
+    "capital": "Valdivia"
+  },
+  {
+    "codigo": "10",
+    "region": "Los Lagos",
+    "capital": "Puerto Montt"
+  },
+  {
+    "codigo": "11",
+    "region": "Aysén del General Carlos Ibáñez del Campo",
+    "capital": "Coyhaique"
+  },
+  {
+    "codigo": "12",
+    "region": "Magallanes y de la Antártica Chilena",
+    "capital": "Punta Arenas"
+  }
 ];
 
 
 ---
 <div class="box">
   <div class="field">
-    <label class="label" for="comuna">Comuna</label>
+    <label class="label" for="region">Región</label>
     <div class="control">
       <div>
-        <select id="comuna" name="comuna" class="form-select" required data-comuna={obj.comuna}>
+        <select id="region" name="region" class="form-select" required data-region={obj.region}>
           <option value="">Seleccione una opción</option>
-          {comunas.map((comuna, index) => (
-            <option value={index + 1}>{comuna}</option>
+          {regiones.map((region, index) => (
+            <option value={index + 1}>{region.region}</option>
           ))}
 
         </select>
       </div>
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="label" for="comuna">Comuna</label>
+    <div class="input-group flex-nowrap">
+      <input type="text" id="comuna" name="comuna" class="form-control" placeholder="Comuna" value={obj.comuna}  required autocomplete="off"/>
     </div>
   </div>
 
@@ -90,8 +143,7 @@ const comunas = [
 </div>
 <script>
   document.addEventListener('DOMContentLoaded', () => {
-    const select = document.getElementById('comuna') as HTMLInputElement;
-
-    select.value = select.dataset.comuna as string;
+    const select = document.getElementById('region') as HTMLInputElement;
+    select.value = select.dataset.region as string;
   });
 </script>
