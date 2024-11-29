@@ -98,7 +98,6 @@ if ( Astro.cookies.has('payload') ) {
   if ( obj.finalizado === false ) {
     return Astro.redirect('/f/datos-personales');
   }
-
   nombres = obj.nombres.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
 
   if (Astro.request.method === "POST") {
@@ -131,28 +130,26 @@ if ( Astro.cookies.has('payload') ) {
       cellphone: obj.telefono1,
       educational_level: obj.nivel_escolaridad || null,
       region_reside: 13,
-      commune_reside: obj.comuna,
+      commune_reside: 1,
       address: obj.direccion,
       support: obj.situacion_discapacidad || null,
-      need_attendance: obj.necesidad_asistencia || null,
-      have_children_under_5_years: obj.menor6 || null,
-      num__children_under_5_years: obj.cuantos_menor6 || null,
-      have_children_under_18_years_isabilities: obj.situacion_discapacidad_mayor6 || null,
-      num_children_under_18_years_isabilities: obj.cuantos_discapacidad || null,
-      bank: obj.banco || null,
-      account_type: obj.tipocuenta || null,
-      account_number: obj.numero_cuenta || null,
-      handle_a_computer: obj.pregunta1 || null,
-      have_a_computer: obj.pregunta2 || null,
-      have_permanent_internet: obj.pregunta3 || null,
-      have_used_conferencing_platforms: obj.pregunta4 || null,
-      reside_in_one_34_urban_commune: obj.pregunta5 || null,
+      need_attendance: 0,
+      have_children_under_5_years: 0,
+      num__children_under_5_years: 0,
+      have_children_under_18_years_isabilities: 0,
+      num_children_under_18_years_isabilities: 0,
+      bank: 0,
+      account_type: 0,
+      account_number: 0,
+      handle_a_computer: 0,
+      have_a_computer: 0,
+      have_permanent_internet: 0,
+      have_used_conferencing_platforms: 0,
+      reside_in_one_34_urban_commune: 0,
       accept_terms: 1,
       url_access: enlace,
-      comoseentero: obj.pregunta6
+      comoseentero: 1
     }
-
-    console.log(rowData);
     
     let columns = Object.keys(rowData).join(`,`);
     let values = Object.keys(rowData).map((value) => `:${value}`).join(`,`);
@@ -167,8 +164,6 @@ if ( Astro.cookies.has('payload') ) {
       // ON DUPLICATE KEY UPDATE ${onduplicate}
       const query = `INSERT INTO ndb_postulant (${columns}) VALUES (${values})`;
       const results1 = await conn.execute(query, rowData);
-
-      //console.log(results1);
 
       if ( results1.rowsAffected > 0 ) {
         //enviar correo con link.
@@ -214,7 +209,7 @@ if ( Astro.cookies.has('payload') ) {
         Astro.cookies.delete('payload');
       }
     } catch(e) {
-      //console.log({e});
+      console.log({e});
       //ir a ver si ya el correo existe....
       const conn = connect(config);
       const query = `select * from ndb_postulant where email = :email`;

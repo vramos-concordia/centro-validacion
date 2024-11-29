@@ -89,7 +89,7 @@ if (Astro.request.method === "POST") {
     <link rel="icon" href="/static/favicon.ico" />
     <title>Cédula Posterior</title>
     <link href="/static/cropperjs/cropper.css" rel="stylesheet" />
-    <script is:inline src="https://kit.fontawesome.com/79015a5470.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/boxicons@2.1.4/dist/boxicons.js"></script>
     <script is:inline src="/static/cropperjs/cropper.min.js"></script>
     <script is:inline src="/static/mrz-worker.bundle-min-wrapped.js"></script>
     <style>
@@ -458,28 +458,28 @@ if (Astro.request.method === "POST") {
               data-action="zoom-in"
               title="Zoom In (I)"
             >
-              <span class="fa fa-search-plus" data-action="zoom-in"/>
+              <box-icon color="#ffffff" name='zoom-in' data-action='zoom-in'></box-icon>
             </button>
             <button
               class="toolbar__button"
               data-action="zoom-out"
               title="Zoom Out (O)"
             >
-              <span class="fa fa-search-minus" data-action="zoom-out"/>
+              <box-icon color="#ffffff" name='zoom-out' data-action='zoom-out'></box-icon>
             </button>
             <button
               class="toolbar__button"
               data-action="rotate-left"
               title="Rotate Left (L)"
             >
-              <span class="fa fa-rotate-left" data-action="rotate-left"/>
+              <box-icon color="#ffffff" name='rotate-left' data-action="rotate-left"></box-icon>
             </button>
             <button
               class="toolbar__button"
               data-action="rotate-left"
               title="Rotate Right (R)"
             >
-              <span class="fa fa-rotate-right" data-action="rotate-left"/>
+              <box-icon color="#ffffff" name='rotate-right' data-action="rotate-right"></box-icon>
             </button>
             <button
               type="button"
@@ -488,7 +488,7 @@ if (Astro.request.method === "POST") {
               title="Delete (Delete)"
               style="color: #B3B6B7;"
             >
-              <span class="fa fa-trash" data-action="remove"/>
+              <box-icon color="#ffffff" name='trash' data-action="remove"></box-icon>
             </button>
 
             <button
@@ -498,7 +498,7 @@ if (Astro.request.method === "POST") {
               title="OK (Enter)"
               style="color: #28B463;"
             >
-              <span class="fa fa-check" data-action="crop"/>
+              <box-icon color="#ffffff" name='check' data-action="crop"></box-icon>
             </button>
           </div>
 
@@ -797,7 +797,7 @@ if (Astro.request.method === "POST") {
 
       function completeHandler(){ 
         overlay_msg.textContent = "Redirigiendo...";
-        location.href = '/formulario';
+        location.href = '/f/datos-personales';
       }
 
 

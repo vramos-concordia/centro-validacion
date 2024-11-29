@@ -4,18 +4,44 @@ const { obj } = Astro.props;
 
 <div class="box">
   <div class="field">
-    <label class="label" for="nivel_escolaridad">¿Nivel de escolaridad?</label>
+    <label class="label" for="nivel_escolaridad">Ultimo nivel de estudio</label>
     <div class="control">
       <div>
         <select id="nivel_escolaridad" name="nivel_escolaridad" class="form-select" required>
           <option value="">Seleccione una opción</option> 
-          {obj.nivel_escolaridad === '1' ? <option value="1" selected >Enseñanza media completa</option> : <option value="1">Enseñanza media completa</option> }
-          {obj.nivel_escolaridad === '2' ? <option value="2" selected >Enseñanza superior incompleta</option> : <option value="2">Enseñanza superior incompleta</option> }
-          {obj.nivel_escolaridad === '3' ? <option value="3" selected >Enseñanza superior completa</option> : <option value="3">Enseñanza superior completa</option> }
-          {obj.nivel_escolaridad === '4' ? <option value="4" selected >Técnico completo</option> : <option value="4">Técnico completo</option> }
-          {obj.nivel_escolaridad === '5' ? <option value="5" selected >Técnico incompleto</option> : <option value="5">Técnico incompleto</option> }
+          {obj.nivel_escolaridad === '1' ? <option value="1" selected >Enseñanza media incompleta</option> : <option value="1">Enseñanza media incompleta</option> }
+          {obj.nivel_escolaridad === '2' ? <option value="2" selected >Enseñanza media completa</option> : <option value="2">Enseñanza media completa</option> }
+          {obj.nivel_escolaridad === '3' ? <option value="3" selected >Estudiante educación superior</option> : <option value="3">Estudiante educación superior</option> }
+          {obj.nivel_escolaridad === '4' ? <option value="4" selected >Titulado técnico o universitario</option> : <option value="4">Titulado técnico o universitario</option> }
         </select>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="box">
+  <div class="field">
+    <label class="label" for="titutlo">Titulo obtenido o carrera en curso</label>
+    <div class="input-group flex-nowrap">
+      <input type="text" id="titutlo" name="titutlo" class="form-control" placeholder="Titulo" required autocomplete="off"/>
+    </div>
+  </div>
+</div>
+
+<div class="box">
+  <div class="field">
+    <label class="label" for="institucion">Institución academica</label>
+    <div class="input-group flex-nowrap">
+      <input type="text" id="institucion" name="institucion" class="form-control" placeholder="Institución" required autocomplete="off"/>
+    </div>
+  </div>
+</div>
+
+<div class="box">
+  <div class="field">
+    <label class="label" for="obtencion_titulo">Año de obtención del titulo</label>
+    <div class="input-group flex-nowrap">
+      <input type="text" id="obtencion_titulo" name="obtencion_titulo" class="form-control" placeholder="Año de obtención" required autocomplete="off"/>
     </div>
   </div>
 </div>

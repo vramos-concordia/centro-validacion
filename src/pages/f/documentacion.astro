@@ -1,14 +1,15 @@
 ---
-import Layout from "../layouts/Layout.astro";
+import Layout from "../../layouts/Layout.astro";
 import { AES, enc } from 'crypto-ts';
-import { configEnv } from '../lib/vars';
+import { configEnv } from '../../lib/vars';
 import { connect } from '@planetscale/database';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.min.js';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js';
-import { diferenciaMeses } from "../lib/utils";
-import { getCodLicenciaMedia, getDataCertNacimientoAsignacionFamiliar, validateFolioCodigoVerificacion } from "../lib/document";
+import { diferenciaMeses } from "../../lib/utils";
+import { getCodLicenciaMedia, getDataCertNacimientoAsignacionFamiliar, validateFolioCodigoVerificacion } from "../../lib/document";
+import Nivelescolaridad from "../../components/Nivelescolaridad.astro";
 
 pdfjsLib.default.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
@@ -34,7 +35,7 @@ const S3 = new S3Client({
 let statusDocuments : {[key: string]: any} = {};
 let documentsSolicitados : {[key: string]: any} = {};
 
-let cargados = [];
+let cargados : any = [];
 
 let obj : {[key: string]: any} = {};
 let row : {[key: string]: any} = {};
@@ -51,6 +52,8 @@ if ( Astro.cookies.has('token') ) {
   let decodeBase64Token = atob(token);
   let decrypted = AES.decrypt(decodeBase64Token, configEnv.SECRET_KEY);
   obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+
+  obj.nivel_escolaridad = null;
   //console.log('cookie-documentacion', {obj});
 
   const conn = connect(config);
@@ -86,7 +89,7 @@ if ( Astro.cookies.has('token') ) {
   
     //console.log(row);
 
-    console.log({documentsSolicitados});
+    //console.log({documentsSolicitados});
     //console.log('query=', Object.keys(documentsSolicitados).join("','"));
 
     //let names = row.names.toLowerCase().replace(/(^\w{1})|(\s+\w{1})/g, (c: any) => c.toUpperCase());
@@ -104,7 +107,7 @@ if ( Astro.cookies.has('token') ) {
     const result0 = await conn.execute(query0, params0);
     if ( result0.rows.length > 0 ) {
       for ( let i = 0; i < result0.rows.length; i++ ) {
-        console.log({RunsCN});
+        //console.log({RunsCN});
 
         let row0: any = result0.rows[i];
         const content = JSON.parse(row0.document_content);
@@ -125,14 +128,11 @@ if ( Astro.cookies.has('token') ) {
         }
         
         if ( row0.document_content === null ) {
-          console.log(row0.document_key);
+          //console.log(row0.document_key);
           continue;
         };
 
-        console.log(row0);
-
         cargados.push(row0.document_key);
-
 
         let statusDocumento = 1;
 
@@ -415,9 +415,9 @@ if ( Astro.cookies.has('token') ) {
         })
       );
 
-      //console.log({result});
+      console.log({result});
 
-      let content = [];
+      let content : any = [];
       var typedarray = new Uint8Array(buffer.slice(0));
       const loadingTask = pdfjsLib.getDocument(typedarray);
 
@@ -434,8 +434,8 @@ if ( Astro.cookies.has('token') ) {
       }
 
 
-      let response_validador = null;
-      let dataCert = null;
+      let response_validador : any = null;
+      let dataCert : any = null;
       let type = 0;
 
       if ( tipo.includes('licencia_media') ) type = 1;
@@ -533,19 +533,30 @@ if ( Astro.cookies.has('token') ) {
    
   </div>
   
+  <Nivelescolaridad obj={obj}></Nivelescolaridad>
+
   <div class="box">
     <div class="field">
       <div class="">
         <h6 class="mb-3"><b>Certificado de estudios</b></h6>
+        <div class="control">
+          <div>
+            <select id="certificado" name="certificado" class="form-select" required>
+              <option value="">Seleccione una opción</option> 
+              {obj.nivel_escolaridad === '1' ? <option value="1" selected >Certificado enseñanza media</option> : <option value="1">Certificado enseñanza media</option> }
+              {obj.nivel_escolaridad === '2' ? <option value="2" selected >Certificado de estudios</option> : <option value="2">Certificado de estudios</option> }
+              {obj.nivel_escolaridad === '3' ? <option value="3" selected >Titulo tecnico o profecional</option> : <option value="3">Titulo tecnico o profecional</option> }
+            </select>
+          </div>
+        </div>
         <p style="text-align: justify;">
-          Para continuar con el proceso de postulación, debe cargar la siguiente documentación obligatoria: 
-          Certificado de estudios de enseñanza media completa (descárgalo aquí: <a href="https://certificados.mineduc.cl/" target="_blank">https://certificados.mineduc.cl/</a>). 
+          Para continuar con el proceso de postulación, debe cargar la siguiente documentación obligatoria (descárgalo aquí: <a href="https://certificados.mineduc.cl/" target="_blank">https://certificados.mineduc.cl/</a>). 
           En caso de subir otro documento que certifique su nivel de enseñanza media completa debe esperar a la aprobación de estos para continuar con su postulación.
         </p>
         <div class="box text-center">
         { !statusDocuments.hasOwnProperty('licencia_media') && 
           <input class="form-control file-input" type="file" id="licencia_media" name="licencia_media" accept="application/pdf" hidden/>
-          <label class="btn btn-warning" for="licencia_media"><b>Seleccione archivo</b> de su Certificado de Estudios de Enseñanza Media Completa</label>
+          <label class="btn btn-warning" for="licencia_media"><b>Seleccione archivo</b> del certificado seleccionado</label>
           <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
         }
         
@@ -589,329 +600,22 @@ if ( Astro.cookies.has('token') ) {
       </div>
     </div> 
   </div>
-
-  { row.have_children_under_5_years === 1 &&
-    <div class="box">
-      <div class="mb-3"><h6>Certificado de nacimiento para asignación familiar de cada hija/o menor de cinco años 11 meses</h6></div>
-      <p>
-        Para continuar con el proceso de postulación, debe cargar documentación obligatoria: 
-        <b>CERTIFICADO DE NACIMIENTO para ASIGNACION FAMILIAR</b> de cada hija/o menor de cinco años 11 meses 
-        (descárgalo aquí: <a href="https://www.registrocivil.cl/principal/servicios-en-linea" target="_blank">https://www.registrocivil.cl/principal/servicios-en-linea</a>) 
-      </p>
-
-      {Array(parseInt(row.num__children_under_5_years)).fill(0).map((_val, index) => (
-        <div class="field box text-center">
-          <div>
-            
-            { !statusDocuments.hasOwnProperty(`certificado_nacimiento_menor_5_11_h_${index + 1}`) && 
-              
-              <input class="form-control file-input" type="file" 
-                id={`certificado_nacimiento_menor_5_11_h_${index + 1}`}
-                name={`certificado_nacimiento_menor_5_11_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_nacimiento_menor_5_11_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Nacimiento <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-            { (statusDocuments.hasOwnProperty(`certificado_nacimiento_menor_5_11_h_${index + 1}`) && 
-                statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].valido === false ) && 
-              <p class="alert alert-info">Certificado de nacimiento <b>Hija/o ({index + 1})</b> cargado
-                <a class="pdf" href={statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-danger" style="text-align: justify;">
-                Le informamos que hemos recibido el documento que ha cargado. 
-                Sin embargo, no hemos podido validar que se trate de un 
-                <b>CERTIFICADO DE NACIMIENTO para ASIGNACION FAMILIAR</b> emitido por el Registro Civil.<br /><br />
-                Recuerde que el documento debe ser solicitado en el siguiente link 
-                <a href="https://www.registrocivil.cl/principal/servicios-en-linea" target="_blank">https://www.registrocivil.cl/principal/servicios-en-linea</a> 
-                luego debe cargar el documento generado y enviado a su correo electrónico por el Registro Civil.
-              </div>
-              <input class="form-control file-input" type="file" 
-                id={`certificado_nacimiento_menor_5_11_h_${index + 1}`}
-                name={`certificado_nacimiento_menor_5_11_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_nacimiento_menor_5_11_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Nacimiento <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-            { (statusDocuments.hasOwnProperty(`certificado_nacimiento_menor_5_11_h_${index + 1}`) && 
-              statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].valido &&
-              statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].corresponde &&
-              statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].edadOk &&
-              !statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].yafuecargado) && 
-              <p class="alert alert-info">Certificado de nacimiento <b>Hija/o ({index + 1})</b> cargado
-                <a class="pdf" href={statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-success " style="text-align: justify;">
-                <Fragment set:html={statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].texto} />
-              </div>
-            }
-
-            { (statusDocuments.hasOwnProperty(`certificado_nacimiento_menor_5_11_h_${index + 1}`) && 
-              statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].valido &&
-              statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].corresponde &&
-              !statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].edadOk &&
-              !statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].yafuecargado) && 
-              <p class="alert alert-info">Certificado de nacimiento <b>Hija/o ({index + 1})</b> cargado
-                <a class="pdf" href={statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-danger " style="text-align: justify;">
-                <Fragment set:html={statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].texto} />
-              </div>
-              <div class="alert alert-danger " style="text-align: justify;">
-                Se le informa que el Certificado de Nacimiento corresponde a un hijo/a de <b>{nombres}, RUN {obj.rut.replaceAll('.', '')}</b>. 
-                Sin embargo la edad no corresponde a un hija/o <b>menor de cinco años 11 meses</b>
-              </div>
-              <input class="form-control file-input" type="file" 
-                id={`certificado_nacimiento_menor_5_11_h_${index + 1}`}
-                name={`certificado_nacimiento_menor_5_11_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_nacimiento_menor_5_11_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Nacimiento <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-            { (statusDocuments.hasOwnProperty(`certificado_nacimiento_menor_5_11_h_${index + 1}`) && 
-              statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].valido &&
-              statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].corresponde &&
-              statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].edadOk &&
-              statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].yafuecargado) && 
-              <p class="alert alert-info">Certificado de nacimiento <b>Hija/o ({index + 1})</b> cargado
-                <a class="pdf" href={statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-danger " style="text-align: justify;">
-                <Fragment set:html={statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].texto} />
-              </div>
-              <div class="alert alert-warning " style="text-align: justify;">
-                Se le informa que el Certificado de Nacimiento para ASIGNACION FAMILIAR ya fue cargado a otro hijo/a.<br /><br />
-                Cargue el documento de otro hijo/a para continuar.
-              </div>
-              <input class="form-control file-input" type="file" 
-                id={`certificado_nacimiento_menor_5_11_h_${index + 1}`}
-                name={`certificado_nacimiento_menor_5_11_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_nacimiento_menor_5_11_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Nacimiento <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-
-            { (statusDocuments.hasOwnProperty(`certificado_nacimiento_menor_5_11_h_${index + 1}`) && 
-              statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].valido &&
-              
-              !statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].corresponde) && 
-              <p class="alert alert-info">Certificado de nacimiento <b>Hija/o ({index + 1})</b> cargado
-                <a class="pdf" href={statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-danger" style="text-align: justify;">
-                <Fragment set:html={statusDocuments[`certificado_nacimiento_menor_5_11_h_${index + 1}`].texto} />
-              </div>
-              <div class="alert alert-danger " style="text-align: justify;">
-                Se le informa que el Certificado de Nacimiento no corresponde a un hijo/a de <b>{nombres}, RUN {obj.rut.replaceAll('.', '')}</b>. 
-                Le solicitamos que, por favor, suba un CERTIFICADO DE NACIMIENTO para ASIGNACION FAMILIAR que indique que Usted es la <b>MADRE</b>.
-              </div>
-              <input class="form-control file-input" type="file" 
-                id={`certificado_nacimiento_menor_5_11_h_${index + 1}`}
-                name={`certificado_nacimiento_menor_5_11_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_nacimiento_menor_5_11_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Nacimiento <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-          </div>
-        </div>
-      ))}
-    </div>
-  }
   
-  {
-    row.have_children_under_18_years_isabilities === 1 &&
-    <div class="box">
-      <div class="mb-3"><h6>Certificado de nacimiento para asignación familiar y Certificado de discapacidad de cada hija/o entre 6 a 18 años</h6></div>
-      <p>
-        Para continuar con el proceso de postulación, debe cargar documentación obligatoria: 
-        Certificado de nacimiento para asignación familiar de cada hija/o entre 6 a 18 años en situación de discapacidad y 
-        certificado de discapacidad correspondiente. 
-        (descárgalos aquí: <a href="https://www.registrocivil.cl/principal/servicios-en-linea" target="_blank">https://www.registrocivil.cl/principal/servicios-en-linea</a>).
-      </p>
-
-      {Array(parseInt(row.num_children_under_18_years_isabilities)).fill(0).map((_val, index) => (
-        <div class="box text-center">
-          <div class="field mb-4">
-            { !statusDocuments.hasOwnProperty(`certificado_nacimiento_entre_6_18_h_${index + 1}`) && 
-              
-              <input class="form-control file-input" type="file"
-                id={`certificado_nacimiento_entre_6_18_h_${index + 1}`}
-                name={`certificado_nacimiento_entre_6_18_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_nacimiento_entre_6_18_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Nacimiento <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-            { (statusDocuments.hasOwnProperty(`certificado_nacimiento_entre_6_18_h_${index + 1}`) && 
-                statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].valido === false ) && 
-              <p class="alert alert-info">Certificado de Nacimiento <b>Hija/o ({index + 1}) cargado</b>
-                <a class="pdf" href={statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a></p>
-              <div class="alert alert-danger" style="text-align: justify;">
-                Le informamos que hemos recibido el documento que ha cargado. 
-                Sin embargo, no hemos podido validar que se trate de un 
-                <b>CERTIFICADO DE NACIMIENTO para ASIGNACION FAMILIAR</b> emitido por el Registro Civil.<br /><br />
-                Recuerde que el documento debe ser solicitado en el siguiente link 
-                <a href="https://www.registrocivil.cl/principal/servicios-en-linea" target="_blank">https://www.registrocivil.cl/principal/servicios-en-linea</a> 
-                luego debe cargar el documento generado y enviado a su correo electrónico por el Registro Civil.
-              </div>
-              <input class="form-control file-input" type="file"
-                id={`certificado_nacimiento_entre_6_18_h_${index + 1}`}
-                name={`certificado_nacimiento_entre_6_18_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_nacimiento_entre_6_18_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Nacimiento <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-            { (statusDocuments.hasOwnProperty(`certificado_nacimiento_entre_6_18_h_${index + 1}`) && 
-              statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].valido &&
-              statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].corresponde &&
-              statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].edadOk &&
-              !statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].yafuecargado) && 
-              <p class="alert alert-info">Certificado de Nacimiento <b>Hija/o ({index + 1}) cargado</b>
-                <a class="pdf" href={statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-success " style="text-align: justify;">
-                <Fragment set:html={statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].texto} />
-              </div>
-            }
-
-            { (statusDocuments.hasOwnProperty(`certificado_nacimiento_entre_6_18_h_${index + 1}`) && 
-              statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].valido &&
-              statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].corresponde &&
-              !statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].edadOk &&
-              !statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].yafuecargado) && 
-              <p class="alert alert-info">Certificado de Nacimiento <b>Hija/o ({index + 1}) cargado</b>
-                <a class="pdf" href={statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-danger " style="text-align: justify;">
-                <Fragment set:html={statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].texto} />
-              </div>
-              <div class="alert alert-danger " style="text-align: justify;">
-                Se le informa que el Certificado de Nacimiento corresponde a un hijo/a de <b>{nombres}, RUN {obj.rut.replaceAll('.', '')}</b>. 
-                Sin embargo la edad no corresponde a un <b>hija/o entre 6 a 18 años</b>
-              </div>
-              <input class="form-control file-input" type="file"
-                id={`certificado_nacimiento_entre_6_18_h_${index + 1}`}
-                name={`certificado_nacimiento_entre_6_18_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_nacimiento_entre_6_18_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Nacimiento <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-
-          { (statusDocuments.hasOwnProperty(`certificado_nacimiento_entre_6_18_h_${index + 1}`) && 
-              statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].valido &&
-              statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].corresponde &&
-              statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].edadOk &&
-              statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].yafuecargado) && 
-              <p class="alert alert-info">Certificado de Nacimiento <b>Hija/o ({index + 1}) cargado</b>
-                <a class="pdf" href={statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-danger " style="text-align: justify;">
-                <Fragment set:html={statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].texto} />
-              </div>
-              <div class="alert alert-danger " style="text-align: justify;">
-                Se le informa que el Certificado de Nacimiento para ASIGNACION FAMILIAR ya fue cargado a otro hijo/a.<br /><br />
-                Cargue el documento de otro hijo/a para continuar.
-              </div>
-              <input class="form-control file-input" type="file"
-                id={`certificado_nacimiento_entre_6_18_h_${index + 1}`}
-                name={`certificado_nacimiento_entre_6_18_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_nacimiento_entre_6_18_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Nacimiento <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-
-            { (statusDocuments.hasOwnProperty(`certificado_nacimiento_entre_6_18_h_${index + 1}`) && 
-              statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].valido &&
-              !statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].corresponde) && 
-              <p class="alert alert-info">Certificado de Nacimiento <b>Hija/o ({index + 1}) cargado</b>
-                <a class="pdf" href={statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-danger" style="text-align: justify;">
-                <Fragment set:html={statusDocuments[`certificado_nacimiento_entre_6_18_h_${index + 1}`].texto} />
-              </div>
-              <div class="alert alert-warning " style="text-align: justify;">
-                Se le informa que el Certificado de Nacimiento no corresponde a un hijo/a de <b>{nombres}, RUN {obj.rut.replaceAll('.', '')}</b>. 
-                Le solicitamos que, por favor, suba un CERTIFICADO DE NACIMIENTO para ASIGNACION FAMILIAR que indica que Usted es la madre.
-              </div>
-              <input class="form-control file-input" type="file"
-                id={`certificado_nacimiento_entre_6_18_h_${index + 1}`}
-                name={`certificado_nacimiento_entre_6_18_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_nacimiento_entre_6_18_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Nacimiento <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-          </div>
-
-          <div class="field">
-            { !statusDocuments.hasOwnProperty(`certificado_discapacidad_entre_6_18_h_${index + 1}`) && 
-              <input class="form-control file-input" type="file"
-                id={`certificado_discapacidad_entre_6_18_h_${index + 1}`}
-                name={`certificado_discapacidad_entre_6_18_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_discapacidad_entre_6_18_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Discapacidad <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-            { (statusDocuments.hasOwnProperty(`certificado_discapacidad_entre_6_18_h_${index + 1}`) && 
-              statusDocuments[`certificado_discapacidad_entre_6_18_h_${index + 1}`].valido &&
-              statusDocuments[`certificado_discapacidad_entre_6_18_h_${index + 1}`].corresponde) && 
-              <p class="alert alert-info">Certificado de Discapacidad <b>Hija/o ({index + 1}) cargado</b>
-                <a class="pdf" href={statusDocuments[`certificado_discapacidad_entre_6_18_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-success " style="text-align: justify;">
-                <Fragment set:html={statusDocuments[`certificado_discapacidad_entre_6_18_h_${index + 1}`].texto} />
-              </div>
-            }
-
-            { (statusDocuments.hasOwnProperty(`certificado_discapacidad_entre_6_18_h_${index + 1}`) && 
-                statusDocuments[`certificado_discapacidad_entre_6_18_h_${index + 1}`].valido &&
-                !statusDocuments[`certificado_discapacidad_entre_6_18_h_${index + 1}`].corresponde) && 
-                <p class="alert alert-info">Certificado de Discapacidad <b>Hija/o ({index + 1}) cargado</b>
-                <a class="pdf" href={statusDocuments[`certificado_discapacidad_entre_6_18_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-danger " style="text-align: justify;">
-                No se ha podido validar el <b>CERTIFICADO DE DISCAPACIDAD</b> correspondiente a su hija/o {index + 1}.
-                y/o PRIMERO suba el CERTIFICADO DE NACIMIENTO de su hija/o {index + 1}.
-              </div>
-              <input class="form-control file-input" type="file"
-                id={`certificado_discapacidad_entre_6_18_h_${index + 1}`}
-                name={`certificado_discapacidad_entre_6_18_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_discapacidad_entre_6_18_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Discapacidad <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-
-            { (statusDocuments.hasOwnProperty(`certificado_discapacidad_entre_6_18_h_${index + 1}`) && 
-                statusDocuments[`certificado_discapacidad_entre_6_18_h_${index + 1}`].valido === false
-              ) &&
-              <p class="alert alert-info">Certificado de Discapacidad <b>Hija/o ({index + 1}) cargado</b>
-                <a class="pdf" href={statusDocuments[`certificado_discapacidad_entre_6_18_h_${index + 1}`].url}><img src="/static/assets/img/pdf.png" /></a>
-              </p>
-              <div class="alert alert-danger" style="text-align: justify;">
-                Le informamos que hemos recibido el documento que ha cargado. 
-                Sin embargo, no hemos podido validar que se trate de un 
-                <b>CERTIFICADO DE DISCAPACIDAD</b> emitido por el Registro Civil.<br /><br />
-                Recuerde que el documento debe ser solicitado en el siguiente link 
-                <a href="https://www.registrocivil.cl/principal/servicios-en-linea" target="_blank">https://www.registrocivil.cl/principal/servicios-en-linea</a> 
-                luego debe cargar el documento generado y enviado a su correo electrónico por el Registro Civil.
-              </div>
-              <div class="alert alert-warning" style="text-align: justify;">
-                Si el documento cargado es otro tipo de certificado que acredite la discapacidad,
-                <b>le solicitamos esperar la aprobación correspondiente para continuar con su postulación.</b>
-              </div> 
-              <input class="form-control file-input" type="file"
-                id={`certificado_discapacidad_entre_6_18_h_${index + 1}`}
-                name={`certificado_discapacidad_entre_6_18_h_${index + 1}`} accept="application/pdf" hidden/>
-              <label class="btn btn-warning" for={`certificado_discapacidad_entre_6_18_h_${index + 1}`}><b>Seleccione archivo</b> Certificado de Discapacidad <b>Hija/o ({index + 1})</b></label>
-              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
-            }
-
-          </div>
-
-        </div>
-        
-      ))}
-
+  <div class="box">
+    <div class="field">
+      <label class="label" for="curso_excel">¿Haz realizado un curso de Excel?</label>
+      <div class="control">
+        <select id="curso_excel" name="curso_excel" class="form-select" required>
+          <option value="">Seleccione una opción</option>
+          <option value="1">SI</option>
+          <option value="2">NO</option>
+        </select>
+      </div>
     </div>
-  }
-  
+
+    <!-- Contenido que se mostrará dinámicamente -->
+    <div id="dynamic-content"></div>
+  </div>
 
   <div class="box">
 
@@ -1012,6 +716,34 @@ if ( Astro.cookies.has('token') ) {
   </div>
 
   <script is:inline src="/static/zxing_reader.js"></script>
+  <script is:inline src="/static/assets/js/bootstrap.js"></script>
+  <script>
+    // Obtener el elemento select y el contenedor dinámico
+    const selectCurso : any = document.getElementById("curso_excel");
+    const dynamicContent : any = document.getElementById("dynamic-content");
+
+    // Escuchar cambios en el select
+    selectCurso.addEventListener("change", (event) => {
+      const value = event.target.value;
+
+      // Limpiar contenido dinámico
+      dynamicContent.innerHTML = "";
+
+      if (value === "1") {
+        // Agregar contenido dinámico si el valor es "1"
+        dynamicContent.innerHTML = `
+          <div class="box">
+            <div class="field">
+              <h6 class="mb-3"><b>Cargar certificado</b></h6>
+              <input class="form-control file-input" type="file" id="certificado_excelpdf" name="certificado_excelpdf" accept="application/pdf" hidden />
+              <label class="btn btn-warning" for="certificado_excelpdf"><b>Seleccione archivo</b> del certificado seleccionado</label>
+              <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
+            </div>
+          </div>
+        `;
+      }
+    });
+  </script>
   <script>
 
     import * as pdfjsLib from 'pdfjs-dist/build/pdf.min.js';
@@ -1019,10 +751,22 @@ if ( Astro.cookies.has('token') ) {
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
+    // Obtén el elemento select
+    const selectElement : any = document.getElementById("certificado");
 
-    let zxing = window.ZXing().then(function(instance: any) {
+    // Maneja el evento change
+    selectElement.addEventListener("change", (event) => {
+      // Obtén el valor seleccionado
+      const selectedValue = event.target.value;
+
+      // Muestra el valor en la consola
+      console.log("Valor seleccionado:", selectedValue);
+      });
+
+
+    /*let zxing = window.ZXing().then(function(instance: any) {
       zxing = instance; // this line is supposedly not required but with current emsdk it is :-/
-    });
+    });*/
 
 
     const loadingDiv = document.getElementById('loading') as HTMLElement;
@@ -1042,10 +786,11 @@ if ( Astro.cookies.has('token') ) {
 
     }
 
-    function completeHandler(){ 
-      location.reload();
-    }
+    function completeHandler(modal:any) {
+      console.log("dasdas")
 
+      modal.hide();
+    }
 
     const readFileToArrayBuffer = async (fileData: any) => {
       return new Promise( (resolve, _reject) => {
@@ -1093,13 +838,12 @@ if ( Astro.cookies.has('token') ) {
 
       const ajax = new XMLHttpRequest();
       ajax.upload.addEventListener("progress", progressHandler, false);
-      ajax.addEventListener("load", completeHandler, false);
-      ajax.open("POST", "/documentacion"); 
+      ajax.addEventListener("load", function() {
+        completeHandler(modal);
+      }, false);
+      ajax.open("POST", "/f/documentacion"); 
       ajax.send(formData);
     });
-
-    
-
 
     let elements = document.querySelectorAll('.file-input');
 
@@ -1136,7 +880,7 @@ if ( Astro.cookies.has('token') ) {
                   // render pdf pages
                   (document.getElementById('pdf-viewer') as HTMLElement).innerHTML = '';
 
-                  let content = [];
+                  let content : any = [];
                   for (let i = 0; i < pages.length; i += 1) {
                     const page = pages[i];
                     const scale = 1.5;
