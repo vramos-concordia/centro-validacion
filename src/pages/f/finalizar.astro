@@ -1,0 +1,136 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { AES, enc } from "crypto-ts";
+import { configEnv } from "../../lib/vars";
+import { connect } from "@planetscale/database";
+import {
+    S3Client,
+    GetObjectCommand,
+    PutObjectCommand,
+} from "@aws-sdk/client-s3";
+
+const config = {
+    host: configEnv.DATABASE_HOST,
+    username: configEnv.DATABASE_USERNAME,
+    password: configEnv.DATABASE_PASSWORD,
+    fetch: (url: any, init: any) => {
+        delete init["cache"];
+        return fetch(url, init);
+    },
+};
+
+const S3 = new S3Client({
+    region: "auto",
+    endpoint: configEnv.R2_ENDPOINT,
+    credentials: {
+        accessKeyId: configEnv.R2_ACCESS_KEY_ID,
+        secretAccessKey: configEnv.R2_SECRET_ACCESS_KEY,
+    },
+});
+
+let obj: any;
+let finalizado : number = 0;
+let errores: string[] = [];
+
+if (Astro.cookies.has("token")) {
+    //recuperar valores de la cookie
+    let token = Astro.cookies.get("token")?.value as string;
+    let decodeBase64Token = atob(token);
+    let decrypted = AES.decrypt(decodeBase64Token, configEnv.SECRET_KEY);
+    obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+
+    const conn = connect(config);
+
+    const query = `select * from ndb_postulant where run = :run`;
+    const params = {
+        run: obj.rut.split("-")[0].replaceAll(".", ""),
+    };
+    const result = await conn.execute(query, params);
+    if (result.rows.length > 0) {
+        let row = result.rows[0];
+        finalizado = row.post_finished;
+    } else {
+        Astro.cookies.delete("token");
+        return Astro.redirect("/");
+    }
+} else {
+    return Astro.redirect("/");
+}
+
+if (Astro.request.method === "POST") {
+    const conn = connect(config);
+
+    const data = await Astro.request.formData();
+    const queryU = `update ndb_postulant set 
+        wants_receive_emails = :wants_receive_emails,
+        post_finished = 1
+        where run = :run`;
+    const paramsU = {
+        run: obj.rut.split("-")[0].replaceAll(".", ""),
+        wants_receive_emails: data.get("desea_informacion")
+    }
+    await conn.execute(queryU, paramsU);
+
+    return Astro.redirect("/f/finalizar");
+}
+---
+
+<Layout title="Documentación">
+    {finalizado == 1 ? (
+        <div class="box">
+            <div class="field">
+            <p>
+                ¡Felicitaciones! Usted ha sido matriculada en el Diplomado en Competencias Digitales para el Empleo de Promueve, 
+                programa del Gobierno de Santiago, aprobado por el Consejo Regional Metropolitano y ejecutado por la Universidad Alberto Hurtado. 
+                Próximamente, le llegará a su correo la siguiente información:
+            </p>
+            <p>
+                <ul>
+                <li>Fechas y horarios de sus clases.</li>
+                <li>Usuario y contraseña de acceso a nuestra aula virtual a través del correo de "info@aulapromueve.cl"</li>
+                </ul>
+            </p>
+            </div>
+        </div>
+    ) : (
+    <form method="POST" action="/f/finalizar" id="frm">
+        {
+            errores.length > 0 && (
+                <div class="alert alert-danger" role="alert">
+                    <strong>Corrija los siguientes errores: </strong>
+                    <ul class="m-1">
+                        {errores.map((item: any) => (
+                            <li>
+                                <Fragment set:html={item} />
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )
+        }
+
+        <div class="box">
+            <div class="field">
+                <label class="label" for="desea_informacion">Cuenta con experiencia en el menos 1 proyecto de digitación y/o validación de datos</label>
+                <div class="control">
+                    <select id="desea_informacion" name="desea_informacion" class="form-select" required >
+                        <option value="">Seleccione una opción</option>
+                        <option value="1">SI</option>
+                        <option value="0">NO</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="box">
+            <div class="field">
+                <div class="control float-right">
+                    <div class="col-6" style="">
+                        <button id="btnNext" type="submit" class="btn btn-primary">&raquo; Siguiente</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+    )}
+</Layout>

@@ -1,0 +1,209 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { AES, enc } from "crypto-ts";
+import { configEnv } from "../../lib/vars";
+import { connect } from "@planetscale/database";
+import {
+    S3Client,
+    GetObjectCommand,
+    PutObjectCommand,
+} from "@aws-sdk/client-s3";
+
+const config = {
+    host: configEnv.DATABASE_HOST,
+    username: configEnv.DATABASE_USERNAME,
+    password: configEnv.DATABASE_PASSWORD,
+    fetch: (url: any, init: any) => {
+        delete init["cache"];
+        return fetch(url, init);
+    },
+};
+
+const S3 = new S3Client({
+    region: "auto",
+    endpoint: configEnv.R2_ENDPOINT,
+    credentials: {
+        accessKeyId: configEnv.R2_ACCESS_KEY_ID,
+        secretAccessKey: configEnv.R2_SECRET_ACCESS_KEY,
+    },
+});
+
+let obj: any;
+let errores: string[] = [];
+
+if (Astro.cookies.has("token")) {
+    //recuperar valores de la cookie
+    let token = Astro.cookies.get("token")?.value as string;
+    let decodeBase64Token = atob(token);
+    let decrypted = AES.decrypt(decodeBase64Token, configEnv.SECRET_KEY);
+    obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+
+    const conn = connect(config);
+
+    const query = `select * from ndb_postulant where run = :run`;
+    const params = {
+        run: obj.rut.split("-")[0].replaceAll(".", ""),
+    };
+    const result = await conn.execute(query, params);
+    if (result.rows.length > 0) {
+        let row = result.rows[0];
+
+        console.log(row);
+    } else {
+        Astro.cookies.delete("token");
+        return Astro.redirect("/");
+    }
+} else {
+    return Astro.redirect("/");
+}
+
+if (Astro.request.method === "POST") {
+    const conn = connect(config);
+
+    const data = await Astro.request.formData();
+    console.log(data)
+    const queryU = `update ndb_postulant set
+        full_time = :full_time,
+        is_teaching = :is_teaching,
+        relationship = :relationship,
+        linked_employment = :linked_employment,
+        disabled_work = :disabled_work,
+        authority = :authority
+        where run = :run`;
+    const paramsU = {
+        run: obj.rut.split("-")[0].replaceAll(".", ""),
+        full_time: data.get("tiempoCompleto"),
+        is_teaching: data.get("docente"),
+        relationship: data.get("parentesco"),
+        linked_employment: data.get("vinculado"),
+        disabled_work: data.get("inhabilitado"),
+        authority: data.get("autoridad")
+    }
+    await conn.execute(queryU, paramsU);
+
+    return Astro.redirect("/f/aceptacion-cargo");
+}
+---
+
+<Layout title="Documentación">
+    <form id="formularioPreguntas" method="POST" action="/f/requerimientos-del-servicio">
+        <div class="box">
+            <div class="field">
+                <label class="label" for="tiempoCompleto">
+                ¿Usted cuenta con disponibilidad para trabajar a tiempo completo y de manera presencial?
+                </label>
+                <div class="control">
+                <select id="tiempoCompleto" name="tiempoCompleto" class="form-select" required>
+                    <option value="">Seleccione una opción</option>
+                    <option value="SI">SI</option>
+                    <option value="NO">NO</option>
+                </select>
+                <div class="invalid-feedback">
+                    Seleccione una opción
+                </div>
+                </div>
+            </div>
+        </div>
+      
+        <div class="box">
+            <div class="field">
+                <label class="label" for="docente">
+                ¿Usted es docente en ejercicio, egresado, jubilado o estudiante de pedagogía o carreras asociadas al área de la educación?
+                </label>
+                <div class="control">
+                <select id="docente" name="docente" class="form-select" required>
+                    <option value="">Seleccione una opción</option>
+                    <option value="SI">SI</option>
+                    <option value="NO">NO</option>
+                </select>
+                <div class="invalid-feedback">
+                    Seleccione una opción
+                </div>
+                </div>
+            </div>
+        </div>
+      
+        <div class="box">
+            <div class="field">
+                <label class="label" for="parentesco">
+                ¿Usted tiene relación de parentesco hasta 2° grado, tanto de consanguinidad como de afinidad, con sostenedores o directores de establecimiento de educación básica y/o media?
+                </label>
+                <div class="control">
+                <select id="parentesco" name="parentesco" class="form-select" required>
+                    <option value="">Seleccione una opción</option>
+                    <option value="SI">SI</option>
+                    <option value="NO">NO</option>
+                </select>
+                <div class="invalid-feedback">
+                    Seleccione una opción
+                </div>
+                </div>
+            </div>
+        </div>
+      
+        <div class="box">
+            <div class="field">
+                <label class="label" for="vinculado">
+                ¿Usted se encuentra vinculado laboralmente a algún establecimiento educacional?
+                </label>
+                <div class="control">
+                <select id="vinculado" name="vinculado" class="form-select" required>
+                    <option value="">Seleccione una opción</option>
+                    <option value="SI">SI</option>
+                    <option value="NO">NO</option>
+                </select>
+                <div class="invalid-feedback">
+                    Seleccione una opción
+                </div>
+                </div>
+            </div>
+        </div>
+      
+        <div class="box">
+            <div class="field">
+                <label class="label" for="inhabilitado">
+                ¿Usted se encuentra inhabilitado para trabajar con niños ni figura en el registro de inhabilitaciones para ejercer funciones en ámbitos educacionales o con menores de edad?
+                </label>
+                <div class="control">
+                <select id="inhabilitado" name="inhabilitado" class="form-select" required>
+                    <option value="">Seleccione una opción</option>
+                    <option value="SI">SI</option>
+                    <option value="NO">NO</option>
+                </select>
+                <div class="invalid-feedback">
+                    Seleccione una opción
+                </div>
+                </div>
+            </div>
+        </div>
+      
+        <div class="box">
+            <div class="field">
+                <label class="label" for="autoridad">
+                    ¿Usted es autoridad o funcionario público en ejercicio?
+                </label>
+                <div class="control">
+                <select id="autoridad" name="autoridad" class="form-select" required>
+                    <option value="">Seleccione una opción</option>
+                    <option value="SI">SI</option>
+                    <option value="NO">NO</option>
+                </select>
+                <div class="invalid-feedback">
+                    Seleccione una opción
+                </div>
+                </div>
+            </div>
+        </div>
+
+       <div class="box">
+            <div class="field">
+                <div class="control float-right">
+                    <div class="col-6" style="">
+                        <button id="btnNext" type="submit" class="btn btn-primary">&raquo; Siguiente</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      
+    </form>
+</Layout>

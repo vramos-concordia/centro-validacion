@@ -36,6 +36,7 @@ let statusDocuments : {[key: string]: any} = {};
 let documentsSolicitados : {[key: string]: any} = {};
 
 let cargados : any = [];
+let errores : string[] = [];
 
 let obj : {[key: string]: any} = {};
 let row : {[key: string]: any} = {};
@@ -69,6 +70,10 @@ if ( Astro.cookies.has('token') ) {
 
     if ( row.post_finished === 1 ) {
       return Astro.redirect('/finalizar');
+    }
+
+    if ( row.docs_finished === 1 ) {
+      return Astro.redirect("/f/experiencia");
     }
 
 
@@ -398,85 +403,62 @@ if ( Astro.cookies.has('token') ) {
     if (Astro.request.method === "POST") {
   
       const data = await Astro.request.formData();
-      //console.log(data);
-      const tipo = data.get('tipo') as string;
-      const file = data.get("file") as File;
-      const extension = file.name.split('.').pop();
-      const buffer = (await file.arrayBuffer()) as any;
+      console.log(data);
 
-      const keyRut = obj.rut.split('-')[0].replaceAll('.', '');
-
-      const result = await S3.send(
-        new PutObjectCommand({
-          Body: buffer,
-          Bucket: configEnv.R2_BUCKET,
-          Key: `${keyRut}/${tipo}.${extension}`,
-          //ContentType: 'image/jpeg',
-        })
-      );
-
-      console.log({result});
-
-      let content : any = [];
-      var typedarray = new Uint8Array(buffer.slice(0));
-      const loadingTask = pdfjsLib.getDocument(typedarray);
-
-      //let content = '';
-
-      const pdf = await loadingTask.promise;
-
-      for ( let nn = 1; nn <= pdf.numPages; nn++) {
-        const page = await pdf.getPage(nn);
-        const textContent = await page.getTextContent();
-        for(let j = 0; j < textContent.items.length; j++) {
-          content.push(textContent.items[j].str);
-        }
+      if(!data.get("titulo")) {
+        errores.push("Debes indicar titulo o carrera obtenida.")
+      }
+      if(!data.get("institucion")) {
+        errores.push("Debes indicar tu institucion.")
+      }
+      if(!data.get("obtencion_titulo")) {
+        errores.push("Falta año de obtencion del titulo o carrera.")
+      }
+      if(!data.get("licencia_media")) {
+        errores.push("Falta subir archivo PDF del certificado de estudios.")
+      }
+      if(data.get("curso_excel") == "1" && !data.get("certificado_excelpdf")) {
+        errores.push("Falta subir archivo PDF del curso excel.")
+      }
+      if(!data.get("nivel_escolaridad")) {
+        errores.push("Debes añadir tu ultimo nivel de estudio.")
+      }
+      if(!data.get("certificado")) {
+        errores.push("Falta especificar tipo de certificado.")
+      }
+      if(!data.get("curso_excel")) {
+        errores.push("Debes especificar curso Excel.")
       }
 
+      if(errores.length === 0) {
+        if(data.get("licencia_media")) {
+          const file = data.get("licencia_media") as File;
+          const tipo = file.name;
+          const extension = file.name.split('.').pop();
+          const buffer = (await file.arrayBuffer()) as any;
 
-      let response_validador : any = null;
-      let dataCert : any = null;
-      let type = 0;
+          const keyRut = obj.rut.split('-')[0].replaceAll('.', '');
 
-      if ( tipo.includes('licencia_media') ) type = 1;
-      if ( tipo.includes('certificado_nacimiento_menor_5_11_h_') ) type = 2; // certificado de nacimiento hijo/a menor a 5 y 11 meses.
-      if ( tipo.includes('certificado_nacimiento_entre_6_18_h_') ) type = 3; // certificado de nacimiento hijo/a entre 6 y 18 años.
-      if ( tipo.includes('certificado_discapacidad_entre_6_18_h_') ) type = 4; // certificado discapacidad hijo/a entre 6 y 18 años.
+          const result = await S3.send(new PutObjectCommand({
+              Body: buffer,
+              Bucket: configEnv.R2_BUCKET,
+              Key: `${keyRut}/${tipo}.${extension}`,
+              //ContentType: 'image/jpeg',
+          }));
 
-      if ( [2, 3].includes(type)) {
-        response_validador = await validateFolioCodigoVerificacion(content);
-        //console.log(responseRegistroCivil);
-        //si es valido obtener json, se podria crear desde la copia.
-        if ( response_validador != null ) {
-          /*if ( response_validador.hasOwnProperty('response') ) {
-            if ( response_validador['response'] === 'true') {
-              
+          let content : any = [];
+          var typedarray = new Uint8Array(buffer.slice(0));
+          const loadingTask = pdfjsLib.getDocument(typedarray);
+          const pdf = await loadingTask.promise;
+          for ( let nn = 1; nn <= pdf.numPages; nn++) {
+            const page = await pdf.getPage(nn);
+            const textContent = await page.getTextContent();
+            for(let j = 0; j < textContent.items.length; j++) {
+              content.push(textContent.items[j].str);
             }
-          }*/
+          }
 
-          response_validador = JSON.stringify(response_validador);
-        }
-
-        dataCert = await getDataCertNacimientoAsignacionFamiliar(content);
-        dataCert = JSON.stringify(dataCert);
-
-      }
-
-      if ( type === 1 ) {
-        // 
-        const codigoVerificacion = await getCodLicenciaMedia(content);
-        if ( codigoVerificacion !== null ) {
-          const url = `https://certificados.mineduc.cl/certificados-web/mvc/validar/certificado/${codigoVerificacion}`;
-
-          //console.log(url);
-
-          const response = await fetch(url);
-          const result = await response.text();
-          response_validador = result;
-        }
-      }
-
-      const query = `insert into ndb_documents(dni, type, path, document_key, document_content, response_validador, data_document, status)
+          const query = `insert into ndb_documents(dni, type, path, document_key, document_content, response_validador, data_document, status)
                     values (:dni, :type, :path, :document_key, :document_content, :response_validador, :data_document, :status)
                     ON DUPLICATE KEY UPDATE 
                       document_content = :document_content, 
@@ -485,18 +467,85 @@ if ( Astro.cookies.has('token') ) {
                       path = :path,
                       type = :type`
 
-      const params = {
-        dni: obj.rut.split('-')[0].replaceAll('.', ''),
-        type: type,
-        path: `${keyRut}/${tipo}.${extension}`,
-        document_key: tipo,
-        document_content: JSON.stringify(content),
-        response_validador: response_validador,
-        data_document: dataCert,
-        status: 1
-      }
+          const params = {
+            dni: obj.rut.split('-')[0].replaceAll('.', ''),
+            type: 1,
+            path: `${keyRut}/${tipo}.${extension}`,
+            document_key: tipo,
+            document_content: JSON.stringify(content),
+            response_validador: null,
+            data_document: null,
+            status: 1
+          }
 
-      await conn.execute(query, params);
+          await conn.execute(query, params);
+
+          console.log(result)
+        }
+
+        if(data.get("certificado_excelpdf")) {
+          const file = data.get("certificado_excelpdf") as File;
+          const tipo = file.name;
+          const extension = file.name.split('.').pop();
+          const buffer = (await file.arrayBuffer()) as any;
+
+          const keyRut = obj.rut.split('-')[0].replaceAll('.', '');
+
+          const result = await S3.send(new PutObjectCommand({
+              Body: buffer,
+              Bucket: configEnv.R2_BUCKET,
+              Key: `${keyRut}/${tipo}.${extension}`,
+              //ContentType: 'image/jpeg',
+          }));
+
+          let content : any = [];
+          var typedarray = new Uint8Array(buffer.slice(0));
+          const loadingTask = pdfjsLib.getDocument(typedarray);
+          const pdf = await loadingTask.promise;
+          for ( let nn = 1; nn <= pdf.numPages; nn++) {
+            const page = await pdf.getPage(nn);
+            const textContent = await page.getTextContent();
+            for(let j = 0; j < textContent.items.length; j++) {
+              content.push(textContent.items[j].str);
+            }
+          }
+
+          const query = `insert into ndb_documents(dni, type, path, document_key, document_content, response_validador, data_document, status)
+                    values (:dni, :type, :path, :document_key, :document_content, :response_validador, :data_document, :status)
+                    ON DUPLICATE KEY UPDATE 
+                      document_content = :document_content, 
+                      response_validador = :response_validador, 
+                      data_document = :data_document,
+                      path = :path,
+                      type = :type`
+
+          const params = {
+            dni: obj.rut.split('-')[0].replaceAll('.', ''),
+            type: 2,
+            path: `${keyRut}/${tipo}.${extension}`,
+            document_key: tipo,
+            document_content: JSON.stringify(content),
+            response_validador: null,
+            data_document: null,
+            status: 1
+          }
+
+          await conn.execute(query, params);
+
+          console.log(result)
+        }
+
+        const queryU = `update ndb_postulant set docs_finished = 1, university_degree = :university_degree, institution = :institution, year_graduation = :year_graduation where run = :run`;
+        const paramsU = {
+          run: row.run,
+          university_degree: data.get('titulo'),
+          institution : data.get('institucion'),
+          year_graduation : data.get('obtencion_titulo')
+        }
+        await conn.execute(queryU, paramsU);
+
+        return Astro.redirect("/f/experiencia");
+      };
     }
   } else {
     Astro.cookies.delete('token');
@@ -508,7 +557,20 @@ if ( Astro.cookies.has('token') ) {
 
 ---
 <Layout title="Documentación">
-  <div class="box">
+  <form method="POST" id="frm">
+    {errores.length > 0 && 
+      
+      <div class="alert alert-danger" role="alert">
+        <strong>Corrija los siguientes errores: </strong>
+        <ul class="m-1">
+          {errores.map((item: any) => (
+            <li><Fragment set:html={item} /></li>
+          ))}
+        </ul>
+      </div>
+    }
+
+    <div class="box">
 
     <div class="notification is-warning has-text-justified">
       <p>        
@@ -626,7 +688,13 @@ if ( Astro.cookies.has('token') ) {
       </p>
     </div>
 
-    { showBtnFinalizar && 
+    <div class="control row">
+      <div class="col-6" style="text-align: right">
+        <button id="btnFinalizar" class="btn btn-primary">&raquo; Finalizar</button>
+      </div>
+    </div>
+
+    <!--{ showBtnFinalizar && 
       <div class="control row">
         <div class="col-6">
           <p>
@@ -650,9 +718,10 @@ if ( Astro.cookies.has('token') ) {
           <button class="btn btn-primary" disabled>&raquo; Finalizar</button>
         </div>
       </div>
-    }
+    }-->
 
   </div>
+  </form>
 
   <div class="modal fade" id="modalupload" data-backdrop="static" tabindex="-1" aria-labelledby="modalupload" aria-hidden="true">
     <div class="modal-dialog  modal-dialog-centered">
@@ -715,6 +784,28 @@ if ( Astro.cookies.has('token') ) {
     </div>
   </div>
 
+  <script>
+    let btnFinalizar = document.getElementById("btnFinalizar");
+    let formDocs = document.getElementById("frm") as HTMLElement;
+
+    let formData = new FormData();
+
+    formDocs.addEventListener("submit", (e) => {
+      e.preventDefault();
+      formDocs.querySelectorAll("input").forEach((input : any) => {
+        if(input.type == "file") formData.append(input.name, input.files[0]);
+        else formData.append(input.name, input.value);
+      })
+
+      formDocs.querySelectorAll("select").forEach((select) => {
+        formData.append(select.name, select.value);
+      })
+
+      const ajax = new XMLHttpRequest();
+      ajax.open("POST", "/f/documentacion"); 
+      ajax.send(formData);
+    })
+  </script>
   <script is:inline src="/static/zxing_reader.js"></script>
   <script is:inline src="/static/assets/js/bootstrap.js"></script>
   <script>
@@ -744,7 +835,7 @@ if ( Astro.cookies.has('token') ) {
       }
     });
   </script>
-  <script>
+  <!--<script>
 
     import * as pdfjsLib from 'pdfjs-dist/build/pdf.min.js';
     import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js';
@@ -987,13 +1078,13 @@ if ( Astro.cookies.has('token') ) {
         });
     });
 
-    if ( (document.getElementById('btnFinalizar') as HTMLAnchorElement) ) {
+    /*if ( (document.getElementById('btnFinalizar') as HTMLAnchorElement) ) {
       (document.getElementById('btnFinalizar') as HTMLAnchorElement).addEventListener('click', function(event) {
         //event.preventDefault();
         showSpinner();
       });
-    }
+    }*/
     
 
-  </script>
+  </script>-->
 </Layout>

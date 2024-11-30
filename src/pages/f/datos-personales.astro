@@ -480,7 +480,7 @@ if (Astro.request.method === "POST") {
         let encrypted = AES.encrypt(JSON.stringify(obj), configEnv.SECRET_KEY).toString();
         Astro.cookies.set('payload', encrypted, { path: '/', httpOnly: true, secure: true, sameSite: 'lax' });
 
-        return Astro.redirect('/f/documentacion');
+        return Astro.redirect('/confirmacion');
       } else {
         obj.finalizado1 = false;
       }

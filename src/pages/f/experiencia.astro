@@ -1,0 +1,233 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { AES, enc } from "crypto-ts";
+import { configEnv } from "../../lib/vars";
+import { connect } from "@planetscale/database";
+import {
+    S3Client,
+    GetObjectCommand,
+    PutObjectCommand,
+} from "@aws-sdk/client-s3";
+
+const config = {
+    host: configEnv.DATABASE_HOST,
+    username: configEnv.DATABASE_USERNAME,
+    password: configEnv.DATABASE_PASSWORD,
+    fetch: (url: any, init: any) => {
+        delete init["cache"];
+        return fetch(url, init);
+    },
+};
+
+const S3 = new S3Client({
+    region: "auto",
+    endpoint: configEnv.R2_ENDPOINT,
+    credentials: {
+        accessKeyId: configEnv.R2_ACCESS_KEY_ID,
+        secretAccessKey: configEnv.R2_SECRET_ACCESS_KEY,
+    },
+});
+
+let obj: any;
+let errores: string[] = [];
+
+if (Astro.cookies.has("token")) {
+    //recuperar valores de la cookie
+    let token = Astro.cookies.get("token")?.value as string;
+    let decodeBase64Token = atob(token);
+    let decrypted = AES.decrypt(decodeBase64Token, configEnv.SECRET_KEY);
+    obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+
+    const conn = connect(config);
+
+    const query = `select * from ndb_postulant where run = :run`;
+    const params = {
+        run: obj.rut.split("-")[0].replaceAll(".", ""),
+    };
+    const result = await conn.execute(query, params);
+    if (result.rows.length > 0) {
+        let row = result.rows[0];
+
+        if ( row.post_finished === 1 ) {
+            return Astro.redirect('/finalizar');
+        }
+        if(row.experience_finished == 1) return Astro.redirect("/f/requerimientos-del-servicio");
+        console.log(row);
+    } else {
+        Astro.cookies.delete("token");
+        return Astro.redirect("/");
+    }
+} else {
+    return Astro.redirect("/");
+}
+
+if (Astro.request.method === "POST") {
+    const conn = connect(config);
+
+    const data = await Astro.request.formData();
+    const queryU = `update ndb_postulant set 
+        experience_finished = 1,
+        have_experience = :have_experience,
+        start_date = :start_date,
+        end_date = :end_date,
+        company = :company,
+        company_name = :company_name,
+        company_phone = :company_phone,
+        company_email = :company_email 
+        where run = :run`;
+    const paramsU = {
+        run: obj.rut.split("-")[0].replaceAll(".", ""),
+        have_experience: data.get("tiene_experiencia"),
+        start_date: data.get("fecha_inicio"),
+        end_date: data.get("fecha_termino"),
+        company: data.get("empresa"),
+        company_name: data.get("contacto_nombre"),
+        company_phone: data.get("contacto_telefono"),
+        company_email: data.get("contacto_email") 
+    }
+    await conn.execute(queryU, paramsU);
+
+    return Astro.redirect("/f/requerimientos-del-servicio");
+}
+---
+
+<Layout title="Documentación">
+    <form method="POST" action="/f/experiencia" id="frm">
+        {
+            errores.length > 0 && (
+                <div class="alert alert-danger" role="alert">
+                    <strong>Corrija los siguientes errores: </strong>
+                    <ul class="m-1">
+                        {errores.map((item: any) => (
+                            <li>
+                                <Fragment set:html={item} />
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )
+        }
+
+        <div class="box">
+            <div class="field">
+                <label class="label" for="tiene_experiencia"
+                    >Cuenta con experiencia en el menos 1 proyecto de digitación
+                    y/o validación de datos</label
+                >
+                <div class="control">
+                    <select id="tiene_experiencia" name="tiene_experiencia" class="form-select" required >
+                        <option value="">Seleccione una opción</option>
+                        <option value="1">SI</option>
+                        <option value="0">NO</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="box d-none" id="preguntasExperiencia">
+            <h1 class="fs-6 fw-semibold mt-4">CUENTANOS DE TU EXPERIENCIA</h1>
+
+            <div class="field">
+                <label class="label" for="fecha_inicio">Fecha inicio</label>
+                <div class="input-group flex-nowrap">
+                    <input type="date" id="fecha_inicio" name="fecha_inicio" class="form-control" placeholder="" required autocomplete="off" />
+                </div>
+            </div>
+            <div class="field">
+                <label class="label" for="fecha_termino">Fecha termino</label>
+                <div class="input-group flex-nowrap">
+                    <input type="date" id="fecha_termino" name="fecha_termino" class="form-control" placeholder="" required autocomplete="off" />
+                </div>
+            </div>
+            <div class="field">
+                <label class="label" for="empresa">Empresa</label>
+                <div class="input-group flex-nowrap">
+                    <input type="text" id="empresa" name="empresa" class="form-control" placeholder="Nombre de la empresa" required autocomplete="off" />
+                </div>
+            </div>
+
+            <h3 class="fs-6 fw-semibold mt-4">DATOS DE REFERENCIA</h3>
+            
+            <div class="field">
+                <label class="label" for="contacto_nombre">Nombre</label>
+                <div class="input-group flex-nowrap">
+                    <input type="text" id="contacto_nombre" name="contacto_nombre" class="form-control" placeholder="Nombre del contacto" required autocomplete="off" />
+                </div>
+            </div>
+            <div class="field">
+                <label class="label" for="contacto_telefono">Télefono</label>
+                <div class="input-group flex-nowrap">
+                    <input type="text" id="contacto_telefono" name="contacto_telefono" class="form-control" placeholder="Numero del contacto" required autocomplete="off" />
+                </div>
+            </div>
+            <div class="field">
+                <label class="label" for="contacto_email">Mail</label>
+                <div class="input-group flex-nowrap">
+                    <input type="email" id="contacto_email" name="contacto_email" class="form-control" placeholder="Correo del contacto" required autocomplete="off" />
+                </div>
+            </div>
+        </div>
+
+        <div class="box">
+            <div class="field">
+                <div class="control float-right">
+                    <div class="col-6" style="">
+                        <button id="btnNext" type="submit" class="btn btn-primary" disabled>&raquo; Siguiente</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</Layout>
+
+<script>
+    let selectTieneExperiencia = document.getElementById("tiene_experiencia") as HTMLInputElement;
+
+    let boxPreguntasExperiencia = document.getElementById("preguntasExperiencia") as HTMLElement;
+
+    let fechaInicio = document.getElementById("fecha_inicio") as HTMLInputElement;
+    let fechaTermino = document.getElementById("fecha_termino") as HTMLInputElement;
+    let empresa = document.getElementById("empresa") as HTMLInputElement;
+    let referenciaNombre = document.getElementById("contacto_nombre") as HTMLInputElement;
+    let referenciaNumero = document.getElementById("contacto_telefono") as HTMLInputElement;
+    let referenciaMail = document.getElementById("contacto_email") as HTMLInputElement;
+
+    selectTieneExperiencia.addEventListener("change", (e) => {
+        console.log(selectTieneExperiencia.value)
+        if(selectTieneExperiencia.value == "1") {
+            boxPreguntasExperiencia.classList.remove('d-none');
+            fechaInicio.setAttribute("required", "required");
+            fechaTermino.setAttribute("required", "required");
+            empresa.setAttribute("required", "required");
+            referenciaNombre.setAttribute("required", "required");
+            referenciaNumero.setAttribute("required", "required");
+            referenciaMail.setAttribute("required", "required");
+        } else {
+            boxPreguntasExperiencia.classList.add('d-none');
+            fechaInicio.removeAttribute("required"),  fechaInicio.value = '';
+            fechaTermino.removeAttribute("required"),  fechaTermino.value = '';
+            empresa.removeAttribute("required"),  empresa.value = '';
+            referenciaNombre.removeAttribute("required"),  referenciaNombre.value = '';
+            referenciaNumero.removeAttribute("required"),  referenciaNumero.value = '';
+            referenciaMail.removeAttribute("required"),  referenciaMail.value = '';
+        }
+    })
+
+    let formStatus = [false,false,false,false,false,false,false];
+    let btnNext = document.getElementById("btnNext") as HTMLElement;
+
+    function checkFormStatus() {
+        let ver = formStatus.filter((s) => s==true);
+        if(ver.length == 7 || selectTieneExperiencia.value == "0") btnNext.removeAttribute("disabled");
+        else btnNext.setAttribute("disabled", "disabled");
+    }
+
+    document.querySelectorAll("input,select").forEach((input : any, i:number) => {
+        input.onchange = () => {
+            if(input.value.length > 0) formStatus[i]=true;
+            else formStatus[i]=false;
+            
+            checkFormStatus();
+        }
+    })
+</script>

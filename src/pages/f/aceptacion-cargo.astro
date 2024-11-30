@@ -1,0 +1,178 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { AES, enc } from "crypto-ts";
+import { configEnv } from "../../lib/vars";
+import { connect } from "@planetscale/database";
+import {
+    S3Client,
+    GetObjectCommand,
+    PutObjectCommand,
+} from "@aws-sdk/client-s3";
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.min.js';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js';
+pdfjsLib.default.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+
+const config = {
+    host: configEnv.DATABASE_HOST,
+    username: configEnv.DATABASE_USERNAME,
+    password: configEnv.DATABASE_PASSWORD,
+    fetch: (url: any, init: any) => {
+        delete init["cache"];
+        return fetch(url, init);
+    },
+};
+
+const S3 = new S3Client({
+    region: "auto",
+    endpoint: configEnv.R2_ENDPOINT,
+    credentials: {
+        accessKeyId: configEnv.R2_ACCESS_KEY_ID,
+        secretAccessKey: configEnv.R2_SECRET_ACCESS_KEY,
+    },
+});
+
+let obj: any;
+let errores: string[] = [];
+let nombres : string = "";
+
+if (Astro.cookies.has("token")) {
+    //recuperar valores de la cookie
+    let token = Astro.cookies.get("token")?.value as string;
+    let decodeBase64Token = atob(token);
+    let decrypted = AES.decrypt(decodeBase64Token, configEnv.SECRET_KEY);
+    obj = JSON.parse(decrypted.toString(enc.Utf8).toString());
+
+    const conn = connect(config);
+
+    const query = `select * from ndb_postulant where run = :run`;
+    const params = {
+        run: obj.rut.split("-")[0].replaceAll(".", ""),
+    };
+    const result = await conn.execute(query, params);
+    if (result.rows.length > 0) {
+        let row = result.rows[0];
+
+        nombres = row.names;
+        console.log(row);
+    } else {
+        Astro.cookies.delete("token");
+        return Astro.redirect("/");
+    }
+} else {
+    return Astro.redirect("/");
+}
+
+if (Astro.request.method === "POST") {
+    const conn = connect(config);
+
+    const data = await Astro.request.formData();
+
+    const saveFile = async(fileS) => {
+        const file = fileS as File;
+        const tipo = file.name;
+          const extension = file.name.split('.').pop();
+          const buffer = (await file.arrayBuffer()) as any;
+
+          const keyRut = obj.rut.split('-')[0].replaceAll('.', '');
+
+          const result = await S3.send(new PutObjectCommand({
+              Body: buffer,
+              Bucket: configEnv.R2_BUCKET,
+              Key: `${keyRut}/${tipo}.${extension}`,
+              //ContentType: 'image/jpeg',
+          }));
+
+          let content : any = [];
+          var typedarray = new Uint8Array(buffer.slice(0));
+          const loadingTask = pdfjsLib.getDocument(typedarray);
+          const pdf = await loadingTask.promise;
+          for ( let nn = 1; nn <= pdf.numPages; nn++) {
+            const page = await pdf.getPage(nn);
+            const textContent = await page.getTextContent();
+            for(let j = 0; j < textContent.items.length; j++) {
+              content.push(textContent.items[j].str);
+            }
+          }
+
+          const query = `insert into ndb_documents(dni, type, path, document_key, document_content, response_validador, data_document, status)
+                    values (:dni, :type, :path, :document_key, :document_content, :response_validador, :data_document, :status)
+                    ON DUPLICATE KEY UPDATE 
+                      document_content = :document_content, 
+                      response_validador = :response_validador, 
+                      data_document = :data_document,
+                      path = :path,
+                      type = :type`
+
+          const params = {
+            dni: obj.rut.split('-')[0].replaceAll('.', ''),
+            type: 3,
+            path: `${keyRut}/${tipo}.${extension}`,
+            document_key: tipo,
+            document_content: JSON.stringify(content),
+            response_validador: null,
+            data_document: null,
+            status: 1
+          }
+
+        await conn.execute(query, params);
+    }
+
+    saveFile(data.get("archivo_1"));
+    saveFile(data.get("archivo_2"));
+    
+    return Astro.redirect("/f/finalizar")
+}
+---
+
+<Layout title="Documentación">
+    <form id="formularioPreguntas" method="POST" action="/f/aceptacion-cargo">
+        <div class="box">
+            <div class="notification is-warning has-text-justified">
+                <p>        
+                    Hola {nombres},
+                </p>
+                <p class="alert alert-warning" style="text-align: justify;">
+                    Le solicitamos que suba los documentos necesarios para completar el proceso.
+                </p>
+            </div>
+        </div>
+
+        <div class="box">
+            <div class="field">
+                <div class="">
+                    <h6 class="mb-3"><b>Declaración jurada firmada</b></h6>
+                </div>
+                <div class="box text-center">
+                    <input class="form-control file-input" type="file" id="archivo_1" name="archivo_1" accept="application/pdf" hidden/>
+                    <label class="btn btn-warning" for="archivo_1"><b>Seleccione archivo</b>: Declaración jurada firmada</label>
+                    <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
+                </div>
+              </div>
+            </div> 
+        </div>
+
+        <div class="box">
+            <div class="field">
+                <div class="">
+                    <h6 class="mb-3"><b>Acuerdo de confidencialidad</b></h6>
+                </div>
+                <div class="box text-center">
+                    <input class="form-control file-input" type="file" id="archivo_2" name="archivo_2" accept="application/pdf" hidden/>
+                    <label class="btn btn-warning" for="archivo_2"><b>Seleccione archivo</b>: Acuerdo de confidencialidad</label>
+                    <div class="invalid-feedback">Debe adjuntar un documento PDF</div>
+                </div>
+              </div>
+            </div> 
+        </div>
+
+       <div class="box">
+            <div class="field">
+                <div class="control float-right">
+                    <div class="col-6" style="">
+                        <button id="btnNext" type="submit" class="btn btn-primary">&raquo; Siguiente</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</Layout>
